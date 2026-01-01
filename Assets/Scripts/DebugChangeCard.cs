@@ -22,7 +22,8 @@ public class DebugChangeCard : MonoBehaviour
       {
         cardIndex = 0;//k
         //cardModel.ToggleFace(false); //debugging without CardFlipper
-        flipper.FlipCard(cardModel.faces[cardModel.faces.Length - 1], cardModel.cardBack, -1); //k
+        //flipper.FlipCard(cardModel.faces[cardModel.faces.Length - 1], cardModel.cardBack, -1);
+        flipper.FlipCard(cardModel.faces[^1], cardModel.cardBack, -1);
       }
       else
       {

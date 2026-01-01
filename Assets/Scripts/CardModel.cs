@@ -6,6 +6,7 @@ public class CardModel : MonoBehaviour
   public Sprite[] faces; //Faces: array[0..9] of Sprite;
   public Sprite cardBack;
   public int cardIndex;
+  
   public void ToggleFace(bool showFace)
   {
     if (showFace)

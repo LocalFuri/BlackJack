@@ -4,11 +4,11 @@ using UnityEngine;
 
 public class CardFlipper : MonoBehaviour
 {
-  SpriteRenderer spriteRenderer;  //k
-  CardModel model;  //k
+  SpriteRenderer spriteRenderer;
+  CardModel model;
 
   public AnimationCurve scaleCurve; //kk
-  public float duration = 0.5f; //k
+  public float duration = 0.5f;
 
   private Vector3 originalScale;
 
@@ -43,7 +43,8 @@ public class CardFlipper : MonoBehaviour
         yield return null;  //k
       }
 
-      transform.localScale = originalScale; //reset scale
+
+    transform.localScale = originalScale; //reset scale
 
       if(cardIndex == -1) //k
       {
