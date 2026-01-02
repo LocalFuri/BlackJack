@@ -119,6 +119,113 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &272067784
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 272067785}
+  - component: {fileID: 272067786}
+  - component: {fileID: 272067787}
+  m_Layer: 0
+  m_Name: Player
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &272067785
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 272067784}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.06184, y: 0.11639, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 1
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &272067786
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 272067784}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c5cd52504e10ca49af9c8b32cc73583, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CardStack
+  isGameDeck: 0
+--- !u!114 &272067787
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 272067784}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efaf63fc360effc4d88d16d2bc513aa4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CardStackView
+  start: {x: -6, y: 3, z: 0}
+  cardOffset: 0.2
+  cardPrefab: {fileID: 1466724867}
+--- !u!1 &482069193
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 482069194}
+  - component: {fileID: 482069195}
+  m_Layer: 0
+  m_Name: DebugDealer
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &482069194
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 482069193}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.06184, y: 0.11639, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 1
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &482069195
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 482069193}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 41b27b5e404b1bc459076f45754587ad, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DebugDealer
+  dealer: {fileID: 1140516036}
+  player: {fileID: 272067786}
 --- !u!1001 &949594255
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -129,7 +236,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 2704472600351088598, guid: 613587078fdff0c4a8d72c69fed27684, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -11.71
+      value: -10.36
       objectReference: {fileID: 0}
     - target: {fileID: 2704472600351088598, guid: 613587078fdff0c4a8d72c69fed27684, type: 3}
       propertyPath: m_LocalPosition.y
@@ -188,7 +295,7 @@ GameObject:
   - component: {fileID: 1140516036}
   - component: {fileID: 1140516038}
   m_Layer: 0
-  m_Name: Card Deck Test
+  m_Name: Dealer
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -203,9 +310,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 1140516035}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9e0719f25a44319458f90bf3f34daaff, type: 3}
+  m_Script: {fileID: 11500000, guid: 4c5cd52504e10ca49af9c8b32cc73583, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Deck
+  isGameDeck: 1
 --- !u!4 &1140516037
 Transform:
   m_ObjectHideFlags: 0
@@ -385,3 +493,5 @@ SceneRoots:
   - {fileID: 1349103289}
   - {fileID: 1140516037}
   - {fileID: 949594255}
+  - {fileID: 272067785}
+  - {fileID: 482069194}

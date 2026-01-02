@@ -3,7 +3,7 @@ using UnityEngine;
 public class CardModel : MonoBehaviour
 {
   SpriteRenderer spriteRenderer;
-  public Sprite[] faces; //Faces: array[0..9] of Sprite;
+  public Sprite[] faces; //faces: array[0..9] of Sprite;
   public Sprite cardBack;
   public int cardIndex;
   
@@ -20,6 +20,6 @@ public class CardModel : MonoBehaviour
   }
   private void Awake()
   {
-    spriteRenderer=GetComponent<SpriteRenderer>();
+    spriteRenderer=GetComponent<SpriteRenderer>(); //shows the face of a card
   }
 }
