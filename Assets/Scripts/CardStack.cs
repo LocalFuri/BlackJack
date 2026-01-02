@@ -2,7 +2,6 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 
-
 public class CardStack : MonoBehaviour
 { //var
   //cards: TList<Integer>;
@@ -13,6 +12,9 @@ public class CardStack : MonoBehaviour
   {
     get { return cards != null && cards.Count > 0; }
   }
+
+  public event CardRemovedEventHandler CardRemoved;
+
 
   public int CardCount
   {
@@ -37,21 +39,25 @@ public class CardStack : MonoBehaviour
     }
   }
 
-  //Pop begin **********************************************************************
+  //POP begin **********************************************************************
   public int Pop()
   {
     int temp =cards[0];   
     cards.RemoveAt(temp); // Removes item At position (temp)
+    
+    if(CardRemoved != null)
+    {
+      CardRemoved(this, new CardRemovedEventArgs(temp));
+    }
+
     return temp;
-  }
-  //Pop end **********************************************************************
+  }//POP end **********************************************************************
 
   //Push begin **********************************************************************
   public void Push(int card)
   {
     cards.Add(card);
-  }
-  //Push end **********************************************************************
+  }//Push end **********************************************************************
 
   public void CreateDeck()
   {

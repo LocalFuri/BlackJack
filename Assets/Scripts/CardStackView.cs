@@ -1,7 +1,5 @@
- using UnityEngine;
-using UnityEngine.UIElements;
-using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
 
 [RequireComponent(typeof(CardStack))] // making your code more robust
 public class CardStackView : MonoBehaviour
@@ -16,17 +14,25 @@ public class CardStackView : MonoBehaviour
   private int cardIndex;
 
   //void START begin ************************************************************************
-  void Start()//k 
+  void Start()
   {
-    fetchedCards = new Dictionary<int, GameObject>();
-    deck = GetComponent<CardStack>();
-    ShowCards();
-    lastCount = deck.CardCount;  
-
-    deck = GetComponent<CardStack>();  //k 
+    fetchedCards = new Dictionary<int, GameObject>();//k
+    deck = GetComponent<CardStack>();//k
     ShowCards();//k
-    lastCount = deck.CardCount;//k
+    lastCount = deck.CardCount;  //k
+
+    deck.CardRemoved += deck_CardRemoved;
   }
+  //Deck_CardRemoved begin ----------------------------------------------------------------------------
+  private void deck_CardRemoved(object sender, CardRemovedEventArgs e)
+  {
+    if (fetchedCards.ContainsKey(e.CardIndex))
+    {
+      fetchedCards.Remove(e.CardIndex);
+    }
+
+  }
+  //Deck_CardRemoved end ----------------------------------------------------------------------------
   //void START end ************************************************************************
 
   //void UPDATE begin ************************************************************************

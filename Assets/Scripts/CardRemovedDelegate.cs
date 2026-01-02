@@ -1,12 +1,1 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Assets.Scripts
-{
-  internal class CardRemovedDelegate
-  {
-  }
-}
+﻿public delegate void CardRemovedEventHandler(object sender, CardRemovedEventArgs e);
