@@ -9,9 +9,15 @@ public class CardStackView : MonoBehaviour
   int lastCount;//k
 
   public Vector3 start;//can use Vector2
-  public float cardOffset;//k
+  public float cardOffset;
+  public bool faceUp =false;
+  public bool reverseLayerorder =false;
+  
+
   public GameObject cardPrefab;//k
-  private int cardIndex;
+
+  public int cardIndex;
+  
 
   //void START begin ************************************************************************
   void Start()
@@ -21,16 +27,16 @@ public class CardStackView : MonoBehaviour
     ShowCards();//k
     lastCount = deck.CardCount;  //k
 
-    deck.CardRemoved += deck_CardRemoved;
+    deck.CardRemoved += deck_CardRemoved;//k
   }
   //Deck_CardRemoved begin ----------------------------------------------------------------------------
   private void deck_CardRemoved(object sender, CardRemovedEventArgs e)
   {
     if (fetchedCards.ContainsKey(e.CardIndex))
     {
+      Destroy(fetchedCards[e.CardIndex]);
       fetchedCards.Remove(e.CardIndex);
     }
-
   }
   //Deck_CardRemoved end ----------------------------------------------------------------------------
   //void START end ************************************************************************
@@ -45,10 +51,12 @@ public class CardStackView : MonoBehaviour
     }
   }
   //void UPDATE end ************************************************************************
-  private void ShowCards()//k
+  
+  //SHOWCARDS begin *********************************************************************************
+  private void ShowCards()
   {
-    int cardCount = 0;//k
-    if (deck.HasCards )//k
+    int cardCount = 0;
+    if (deck.HasCards )
     {
       foreach (int i in deck.GetCards())
       {
@@ -58,7 +66,8 @@ public class CardStackView : MonoBehaviour
         cardCount++;
       }
     }
-  }
+  }//SHOWCARDS end *********************************************************************************
+
   void AddCard(Vector3 position, int CardIndex, int positionalIndex)//k
   {
     if (fetchedCards.ContainsKey(CardIndex))
@@ -71,12 +80,21 @@ public class CardStackView : MonoBehaviour
 
     CardModel cardModel = cardCopy.GetComponent<CardModel>();//k
     cardModel.cardIndex = cardIndex;
-    cardModel.ToggleFace(true);
+    cardModel.ToggleFace(faceUp);
 
     SpriteRenderer spriteRenderer = cardCopy.GetComponent<SpriteRenderer>();
+    if (reverseLayerorder)
+    {
+      spriteRenderer.sortingOrder = 51 - positionalIndex;
+    }
+    else
+    {
+      spriteRenderer.sortingOrder = positionalIndex;
+    }
+
     spriteRenderer.sortingOrder = positionalIndex;  //1. choice of order
 
     fetchedCards.Add(CardIndex, cardCopy);
-    
+    Debug.Log("Hand Value = " + deck.HandValue());
   }
  }

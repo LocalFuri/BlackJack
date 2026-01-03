@@ -1,6 +1,7 @@
-using UnityEngine;
+ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.Rendering.Universal;
 
 public class CardStack : MonoBehaviour
 { //var
@@ -15,12 +16,11 @@ public class CardStack : MonoBehaviour
 
   public event CardRemovedEventHandler CardRemoved;
 
-
   public int CardCount
   {
     get
     {
-      if(cards == null)
+      if (cards == null)
       {
         return 0;
       }
@@ -30,10 +30,10 @@ public class CardStack : MonoBehaviour
       }
     }
   }
-  
+
   public IEnumerable<int> GetCards()
   {
-    foreach(int i in cards)
+    foreach (int i in cards)
     {
       yield return i;
     }
@@ -42,10 +42,10 @@ public class CardStack : MonoBehaviour
   //POP begin **********************************************************************
   public int Pop()
   {
-    int temp =cards[0];   
+    int temp = cards[0];
     cards.RemoveAt(temp); // Removes item At position (temp)
-    
-    if(CardRemoved != null)
+
+    if (CardRemoved != null)
     {
       CardRemoved(this, new CardRemovedEventArgs(temp));
     }
@@ -58,6 +58,63 @@ public class CardStack : MonoBehaviour
   {
     cards.Add(card);
   }//Push end **********************************************************************
+
+  //HANDVALUE begin **********************************************************************
+  public int HandValue() //k
+  {
+    int total = 0;//k
+    int aces = 0;
+
+    foreach (int card in GetCards())//k
+    {
+      int cardRank = card % 13;// check for naming conventions carRank instead of CardRank
+      if (0 == cardRank)
+      {
+        aces++;
+      }
+      else if (cardRank < 10)
+      {
+        cardRank += 1;
+      }
+      else
+      {
+        cardRank = 10;
+      }
+    }
+    /* old code
+
+    if (cardRank <= 8) // array[0..8], max =9
+    {
+      cardRank += 2;//k
+      total = total + cardRank;
+    }
+    else if (cardRank > 8 && cardRank < 12)//k
+    {
+      cardRank = 10;//k
+      total = total + cardRank;
+    }
+    else
+    {
+      aces++;
+    }
+
+  } */
+
+    //***************************************************************************
+    for (int i =  0; i < aces; i++) //k
+    {
+      if(total + 11 <= 21)//k
+      {
+        total = total + 11;//k
+      }
+      else//k
+      {
+        total = total + 1;//k   
+      }
+    }
+    return total;
+  }
+  //HANDVALUE end **********************************************************************
 
   public void CreateDeck()
   {
@@ -88,9 +145,3 @@ public class CardStack : MonoBehaviour
     }
   }
 }
-
-
-
-
-
-
