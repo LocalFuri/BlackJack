@@ -8,7 +8,7 @@ public class CardStackView : MonoBehaviour
 {
   CardStack deck;
   Dictionary<int, CardView> fetchedCards;
-  int lastCount;
+//  int lastCount;
 
   public Vector3 start;//can use Vector2
   public float cardOffset;
@@ -21,15 +21,26 @@ public class CardStackView : MonoBehaviour
     fetchedCards[card].IsFaceUp = isFaceUp;
   }
 
+  public void Clear()
+  {
+    deck.Reset();
+
+    foreach(CardView view in fetchedCards.Values)
+    {
+      Destroy(view.Card);
+    }
+    fetchedCards.Clear();    
+  }
+
   public int cardIndex;
  
-  //void START begin ************************************************************************
+  //void AWAKE begin ************************************************************************
   void Awake()
   {
     fetchedCards = new Dictionary<int, CardView>();
     deck = GetComponent<CardStack>();
     ShowCards();
-    lastCount = deck.CardCount;
+    
 
     deck.CardRemoved  += deck_CardRemoved;
     deck.CardAdded    += deck_CardAdded ;
@@ -55,16 +66,19 @@ public class CardStackView : MonoBehaviour
     }
   }
   //Deck_CardRemoved end ----------------------------------------------------------------------------
-  //void START end ************************************************************************
+  //void AWAKE end ************************************************************************
 
   //void UPDATE begin ************************************************************************
   void Update()
   {
-    if (lastCount != deck.CardCount)
-    {
-      lastCount = deck.CardCount;
-      ShowCards();
-    }
+    ShowCards();
+    //Debug.Log("Hand Value = " + deck.HandValue());
+
+    //if (lastCount != deck.CardCount)
+    //{
+    //  lastCount = deck.CardCount;
+    //  ShowCards();
+    //}
   }
   //void UPDATE end ************************************************************************
   
@@ -114,7 +128,6 @@ public class CardStackView : MonoBehaviour
     }
 
     fetchedCards.Add(CardIndex, new CardView(cardCopy));
-    Debug.Log("Hand Value = " + deck.HandValue());
   }
 
 }

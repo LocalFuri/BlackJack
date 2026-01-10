@@ -140,9 +140,15 @@ public class CardStack : MonoBehaviour
       cards[n] = temp;
     }
   }
-  //void Start()
-    void Awake()
+
+  public void Reset()
   {
+    cards.Clear();
+  }
+
+  void Awake()
+  {
+    Debug.Log("sssssssssssssssssssssssssssssss");
     cards = new List<int>();
     if (isGameDeck)
     {
