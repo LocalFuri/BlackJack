@@ -26,8 +26,9 @@ namespace Blackjack
 
             _time += Time.deltaTime;
             float t = (Mathf.Sin(_time * PulseSpeed * Mathf.PI * 2f) + 1f) * 0.5f;
-            _label.color = Color.Lerp(_originalColor, Color.white, t);
-        }
+            //_label.color = Color.Lerp(_originalColor, Color.white, t);
+            _label.color = Color.Lerp(_originalColor, Color.red, t);
+    }
 
         /// <summary>Starts pulsing the label color between original and white.</summary>
         public void StartPulse()

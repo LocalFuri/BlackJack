@@ -11,7 +11,7 @@ namespace Blackjack
     [RequireComponent(typeof(TextMeshProUGUI))]
     public class ClockLabel : MonoBehaviour
     {
-        private const string TimeFormat = "HH:mm";
+        private const string TimeFormat = "HH:mm"; //HH military time
 
         private TextMeshProUGUI _label;
 

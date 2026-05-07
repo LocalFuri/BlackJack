@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -49,6 +50,11 @@ namespace Blackjack
         [SerializeField] private ChipBetting chipBetting;
         [SerializeField] private int startingMoney = 0;
 
+        [Header("Basic Strategy")]
+        [SerializeField] private BasicStrategyAdvisor basicStrategyAdvisor;
+        [SerializeField] private StrategyDeviationPopup deviationPopup;
+        [SerializeField] private Color deviationColor = new Color(1f, 0.65f, 0f, 1f); // orange fallback
+
         [Header("Effects")]
         [SerializeField] private FireworksEffect fireworks;
 
@@ -59,8 +65,8 @@ namespace Blackjack
     [SerializeField] private SoundEntry cheaterSound;
     [SerializeField] private SoundEntry chipSound;
     [SerializeField] private SoundEntry damnitSound;
-    [SerializeField] private SoundEntry hmhSound;
     [SerializeField] private SoundEntry ddSound;
+    [SerializeField] private SoundEntry hmhSound;
     [SerializeField] private SoundEntry dealCardSound;
     [SerializeField] private SoundEntry exitSound;
     [SerializeField] private SoundEntry knockSound;
@@ -79,7 +85,7 @@ namespace Blackjack
         [Header("Timing")]
 
         [Tooltip("dealDelay ist set to 0.45 in code, you can not change it in the inspector!")]
-        [SerializeField] private float dealDelay          = 0.45f; //default was 0.45
+        [SerializeField] private float dealDelay          = 0.45f; //default is 0.45
         [SerializeField] private float dealerPauseDelay   = 0.7f;
         [SerializeField] private float endRoundDelay      = 3.0f;
         [SerializeField] private float newRoundPause      = 0.5f;
@@ -120,6 +126,11 @@ namespace Blackjack
         private bool _forceDoubleDownTest;
         private bool _isSplitRound;
         private int  _activeHandIndex; // 0 = player, 1 = split
+
+        // Snapshot of the dealer's upcard taken when the player turn begins.
+        // Used by the strategy advisor so evaluations are consistent even if
+        // the hand state changes (e.g. during a split).
+        private CardData _dealerUpcardSnapshot;
 
         private int _doubleDownExtraBet; // extra bet deducted when doubling down
         private int _savedBetBeforeAction; // bet amount before split/double-down, restored next round
@@ -197,6 +208,9 @@ namespace Blackjack
             if (chipBetting != null)
                 chipBetting.OnBetChanged += OnBetChangedHandler;
 
+            if (basicStrategyAdvisor != null)
+                basicStrategyAdvisor.OnActionEvaluated += OnStrategyActionEvaluated;
+
             _deck.Build();
             _defaultStatusColor = statusLabel.color;
             InitSplitScoreLabel();
@@ -209,6 +223,16 @@ namespace Blackjack
         {
             if (chipBetting != null)
                 chipBetting.OnBetChanged -= OnBetChangedHandler;
+
+            if (basicStrategyAdvisor != null)
+                basicStrategyAdvisor.OnActionEvaluated -= OnStrategyActionEvaluated;
+        }
+
+        /// <summary>Shows a deviation message in the status label when popup is unavailable.</summary>
+        private void OnStrategyActionEvaluated(StrategyEvaluation evaluation)
+        {
+            if (!evaluation.IsCorrect && deviationPopup == null)
+                SetStatus(evaluation.DeviationMessage, deviationColor);
         }
 
         // ──────────────────────────────────────────────────────────────────────────
@@ -310,21 +334,21 @@ namespace Blackjack
         public void OnHit()
         {
             if (_state != GameState.PlayerTurn) return;
-            StartCoroutine(PlayerHit());
+            ConfirmOrExecute(PlayerAction.Hit, () => StartCoroutine(PlayerHit()));
         }
 
         /// <summary>Player ends their turn; advances to split hand or dealer turn.</summary>
         public void OnStand()
         {
             if (_state != GameState.PlayerTurn) return;
-            StartCoroutine(AdvanceOrDealerTurn());
+            ConfirmOrExecute(PlayerAction.Stand, () => StartCoroutine(AdvanceOrDealerTurn()));
         }
 
         /// <summary>Player surrenders — forfeits half their bet and ends the round immediately.</summary>
         public void OnSurrender()
         {
             if (_state != GameState.PlayerTurn) return;
-            StartCoroutine(PlayerSurrender());
+            ConfirmOrExecute(PlayerAction.Surrender, () => StartCoroutine(PlayerSurrender()));
         }
 
         private IEnumerator PlayerSurrender()
@@ -351,6 +375,12 @@ namespace Blackjack
         {
             if (_state != GameState.PlayerTurn) return;
             if (!CanSplit()) return;
+            ConfirmOrExecute(PlayerAction.Split, ExecuteSplit);
+        }
+
+        /// <summary>Performs all split setup (bet deduction, chip UI) and starts the split coroutine.</summary>
+        private void ExecuteSplit()
+        {
             _savedBetBeforeAction = CurrentBet;
             _playerMoney -= CurrentBet;
             RefreshMoneyLabel();
@@ -366,7 +396,64 @@ namespace Blackjack
         {
             if (_state != GameState.PlayerTurn) return;
             if (ActiveHand.Cards.Count != 2) return;
-            StartCoroutine(PerformDoubleDown());
+            ConfirmOrExecute(PlayerAction.Double, () => StartCoroutine(PerformDoubleDown()));
+        }
+
+        // ─── Strategy confirmation ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// Evaluates <paramref name="chosenAction"/> against basic strategy. If correct, or no
+        /// popup is assigned, executes immediately. Otherwise disables buttons and shows the
+        /// deviation popup so the player can keep their action or switch to the recommendation.
+        /// </summary>
+        private void ConfirmOrExecute(PlayerAction chosenAction, Action executeChosen)
+        {
+            if (basicStrategyAdvisor == null)
+            {
+                executeChosen();
+                return;
+            }
+
+            bool hasSplit     = CanSplit();
+            bool hasDouble    = CanDoubleDown();
+            bool hasSurrender = CanSurrender();
+
+            StrategyEvaluation evaluation = basicStrategyAdvisor.Evaluate(
+                chosenAction, ActiveHand, _dealerUpcardSnapshot,
+                canSplit: hasSplit, canDouble: hasDouble, canSurrender: hasSurrender);
+
+            if (evaluation.IsCorrect || deviationPopup == null)
+            {
+                executeChosen();
+                return;
+            }
+
+            // The popup's full-screen background blocks all game-button input while it is
+            // visible, so there is no need to disable the action buttons here.  Disabling
+            // them before showing the popup was the cause of the freeze: if the callback
+            // never fired (or threw before its own SetButtonState call), buttons stayed
+            // locked forever.  Each action coroutine disables and re-enables buttons in
+            // its own flow, so we can hand off cleanly from here.
+            deviationPopup.Show(
+                message:          evaluation.DeviationMessage,
+                keepLabel:        $"Keep ({chosenAction})",
+                followLabel:      $"Follow Strategy ({evaluation.Recommendation})",
+                onKeep:           executeChosen,
+                onFollowStrategy: BuildActionForRecommendation(evaluation.Recommendation));
+        }
+
+        /// <summary>Returns an execute delegate for the given strategy recommendation.</summary>
+        private Action BuildActionForRecommendation(StrategyAction recommendation)
+        {
+            return recommendation switch
+            {
+                StrategyAction.Hit       => () => StartCoroutine(PlayerHit()),
+                StrategyAction.Stand     => () => StartCoroutine(AdvanceOrDealerTurn()),
+                StrategyAction.Double    => () => StartCoroutine(PerformDoubleDown()),
+                StrategyAction.Split     => ExecuteSplit,
+                StrategyAction.Surrender => () => StartCoroutine(PlayerSurrender()),
+                _                        => () => StartCoroutine(PlayerHit()),
+            };
         }
 
         /// <summary>Forces the next deal to give the player a natural blackjack, then starts the round.</summary>
@@ -460,6 +547,9 @@ namespace Blackjack
             SetButtonState(dealEnabled: false, actionEnabled: true, splitEnabled: CanSplit(), doubleDownEnabled: CanDoubleDown());
             SetStatus($"Your turn");
 
+            // Snapshot the dealer's visible upcard for strategy evaluation.
+            _dealerUpcardSnapshot = _dealerHand.Cards[0];
+
             bool hasPair = CanSplit();
 
             if (!hasPair && _playerHand.BestValue() <= AutoHitMaxScore)
@@ -487,6 +577,9 @@ namespace Blackjack
             !_isSplitRound
             && _playerHand.Count == 2
             && _playerHand.Cards[0].Rank == _playerHand.Cards[1].Rank;
+
+        private bool CanSurrender() =>
+            ActiveHand.Count == 2 && !_isSplitRound;
 
         private IEnumerator PerformSplit()
         {
@@ -551,8 +644,9 @@ namespace Blackjack
         private IEnumerator PerformDoubleDown()
         {
             SetButtonState(dealEnabled: false, actionEnabled: false, splitEnabled: false);
-            SetStatus("Double Down!");
 
+            // Status is set after the deal so a deviation message shown just before
+            // this coroutine starts stays visible during the deal animation.
             _savedBetBeforeAction = CurrentBet;
             _doubleDownExtraBet = CurrentBet;
             _playerMoney -= _doubleDownExtraBet;
@@ -564,6 +658,8 @@ namespace Blackjack
                            _activeHandIndex == 0 ? playerCardArea : splitCardArea,
                            faceUp: true));
 
+            SetStatus("Double Down!");
+
             UpdateScoreLabels(revealDealer: false);
 
             if (ActiveHand.IsBust())
@@ -571,7 +667,7 @@ namespace Blackjack
                 yield return StartCoroutine(RevealHoleCard());
                 UpdateScoreLabels(revealDealer: true);
                 PlayLoseSound();
-                SetStatus($"Busted mark99");
+                SetStatus($"Busted");
                 yield return StartCoroutine(EndRound());
                 yield break;
             }
@@ -1168,7 +1264,7 @@ namespace Blackjack
                 yield break;
             }
 
-            SoundEntry chosen = pool[Random.Range(0, pool.Count)];
+            SoundEntry chosen = pool[UnityEngine.Random.Range(0, pool.Count)];
             _lastDoubleBJSound = chosen;
 
             chosen.Play(audioSource);
