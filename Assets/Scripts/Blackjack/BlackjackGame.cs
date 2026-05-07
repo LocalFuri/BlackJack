@@ -58,9 +58,10 @@ namespace Blackjack
     [SerializeField] private SoundEntry cardSlideSound;
     [SerializeField] private SoundEntry cheaterSound;
     [SerializeField] private SoundEntry chipSound;
+    [SerializeField] private SoundEntry damnitSound;
+    [SerializeField] private SoundEntry hmhSound;
     [SerializeField] private SoundEntry ddSound;
     [SerializeField] private SoundEntry dealCardSound;
-    //[SerializeField] private SoundEntry eraseCardSound;
     [SerializeField] private SoundEntry exitSound;
     [SerializeField] private SoundEntry knockSound;
     [SerializeField] private SoundEntry loseSound;
@@ -71,15 +72,17 @@ namespace Blackjack
     [SerializeField] private SoundEntry tieSound;
     [SerializeField] private SoundEntry winSound;
     [SerializeField] private SoundEntry yuhuSound;
-        
+
+    private SoundEntry? _lastDoubleBJSound;
+    private bool _doubleBJSoundPlaying;
 
         [Header("Timing")]
 
         [Tooltip("dealDelay ist set to 0.45 in code, you can not change it in the inspector!")]
-        [SerializeField] private float dealDelay        = 0.45f; //default was 0.45
-        [SerializeField] private float dealerPauseDelay = 0.7f;
-        [SerializeField] private float endRoundDelay    = 3.0f;
-        [SerializeField] private float newRoundPause    = 0.5f;
+        [SerializeField] private float dealDelay          = 0.45f; //default was 0.45
+        [SerializeField] private float dealerPauseDelay   = 0.7f;
+        [SerializeField] private float endRoundDelay      = 3.0f;
+        [SerializeField] private float newRoundPause      = 0.5f;
 
         // ──────────────────────────────────────────────────────────────────────────
         // Constants mark auto
@@ -280,6 +283,7 @@ namespace Blackjack
         /// </summary>
         private void StartNewRound()
         {
+            if (_doubleBJSoundPlaying) return;
             EnsureMinimumBet();
             _savedBetBeforeAction = 0;
             _playerMoney -= CurrentBet;
@@ -444,7 +448,7 @@ namespace Blackjack
                 yield return StartCoroutine(RevealHoleCard());
                 UpdateScoreLabels(revealDealer: true);
 
-                if (playerBJ && dealerBJ)  { cheaterSound.Play(audioSource); SetStatus("Push", PushColor); ApplyPayout(PayoutResult.Push, CurrentBet); }
+                if (playerBJ && dealerBJ)  { StartCoroutine(PlayDoubleBJSoundRoutine()); SetStatus("Push", PushColor); ApplyPayout(PayoutResult.Push, CurrentBet); }
                 else if (playerBJ)         { ApplyBlackjackGlow(); fireworks.Play(GetPlayerCardsCenter()); PlayNaturalBlackjackSound(); SetStatus("You win", WinColor); ApplyPayout(PayoutResult.BlackjackWin, CurrentBet); }
                 else                       { PlayLoseSound();   SetStatus("You lose", LoseColor); ApplyPayout(PayoutResult.Lose, CurrentBet); }
 
@@ -726,6 +730,16 @@ namespace Blackjack
         private void OnBetChangedHandler(int delta)
         {
             RefreshMoneyLabel();
+
+            if (!IsBettingAllowed) return;
+
+            // A chip was just added — prompt the player to deal.
+            if (delta > 0 && statusLabel.text == "Place your bet")
+                SetStatus("Press Deal to start");
+
+            // All chips were removed — prompt the player to place a bet again.
+            if (CurrentBet == 0)
+                SetStatus("Place your bet");
         }
 
         /// <summary>
@@ -824,7 +838,8 @@ namespace Blackjack
             yield return new WaitForSeconds(endRoundDelay);
             chipBetting?.ResetMaxBet();
             chipBetting?.ClampBetToMaxBet();
-            SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
+            if (!_doubleBJSoundPlaying)
+                SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
             // State stays RoundOver — chip click or Deal press drives the next transition.
         }
 
@@ -1123,6 +1138,44 @@ namespace Blackjack
         private void PlayTieSound()
         {
             tieSound.Play(audioSource);
+        }
+
+        /// <summary>
+        /// Triggered on a double natural blackjack push. Plays the tie sound once,
+        /// then plays one randomly chosen sound from cheaterSound, damnitSound, and hmhSound.
+        /// The same sound is never played twice in a row. Only assigned clips are included.
+        /// The deal button stays locked until the random sound has finished playing.
+        /// </summary>
+        private IEnumerator PlayDoubleBJSoundRoutine()
+        {
+            _doubleBJSoundPlaying = true;
+
+            tieSound.Play(audioSource);
+            yield return new WaitForSeconds(tieSound.Length);
+
+            List<SoundEntry> pool = new List<SoundEntry>();
+            if (cheaterSound.HasClip) pool.Add(cheaterSound);
+            if (damnitSound.HasClip)  pool.Add(damnitSound);
+            if (hmhSound.HasClip)     pool.Add(hmhSound);
+
+            if (_lastDoubleBJSound.HasValue && pool.Count > 1)
+                pool.RemoveAll(s => s.clip == _lastDoubleBJSound.Value.clip);
+
+            if (pool.Count == 0)
+            {
+                _doubleBJSoundPlaying = false;
+                SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
+                yield break;
+            }
+
+            SoundEntry chosen = pool[Random.Range(0, pool.Count)];
+            _lastDoubleBJSound = chosen;
+
+            chosen.Play(audioSource);
+            yield return new WaitForSeconds(chosen.Length);
+            _doubleBJSoundPlaying = false;
+
+            SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
         }
 
         private void SetButtonState(bool dealEnabled, bool actionEnabled, bool splitEnabled, bool doubleDownEnabled = false)
