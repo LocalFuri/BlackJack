@@ -51,9 +51,7 @@ namespace Blackjack
         [SerializeField] private int startingMoney = 0;
 
         [Header("Basic Strategy")]
-        [SerializeField] private BasicStrategyAdvisor basicStrategyAdvisor;
         [SerializeField] private StrategyDeviationPopup deviationPopup;
-        [SerializeField] private Color deviationColor = new Color(1f, 0.65f, 0f, 1f); // orange fallback
 
         [Header("Effects")]
         [SerializeField] private FireworksEffect fireworks;
@@ -127,13 +125,13 @@ namespace Blackjack
         private bool _isSplitRound;
         private int  _activeHandIndex; // 0 = player, 1 = split
 
-        // Snapshot of the dealer's upcard taken when the player turn begins.
-        // Used by the strategy advisor so evaluations are consistent even if
-        // the hand state changes (e.g. during a split).
-        private CardData _dealerUpcardSnapshot;
-
         private int _doubleDownExtraBet; // extra bet deducted when doubling down
         private int _savedBetBeforeAction; // bet amount before split/double-down, restored next round
+
+        // Snapshot of the dealer's visible upcard taken at the start of the player's turn.
+        private CardData _dealerUpcardSnapshot;
+
+        private readonly BasicStrategyAdvisor _strategyAdvisor = new();
 
         private decimal _playerMoney; //decimal need for 5 chips / 2 surrendering = 2.5 chips
 
@@ -208,9 +206,6 @@ namespace Blackjack
             if (chipBetting != null)
                 chipBetting.OnBetChanged += OnBetChangedHandler;
 
-            if (basicStrategyAdvisor != null)
-                basicStrategyAdvisor.OnActionEvaluated += OnStrategyActionEvaluated;
-
             _deck.Build();
             _defaultStatusColor = statusLabel.color;
             InitSplitScoreLabel();
@@ -223,16 +218,6 @@ namespace Blackjack
         {
             if (chipBetting != null)
                 chipBetting.OnBetChanged -= OnBetChangedHandler;
-
-            if (basicStrategyAdvisor != null)
-                basicStrategyAdvisor.OnActionEvaluated -= OnStrategyActionEvaluated;
-        }
-
-        /// <summary>Shows a deviation message in the status label when popup is unavailable.</summary>
-        private void OnStrategyActionEvaluated(StrategyEvaluation evaluation)
-        {
-            if (!evaluation.IsCorrect && deviationPopup == null)
-                SetStatus(evaluation.DeviationMessage, deviationColor);
         }
 
         // ──────────────────────────────────────────────────────────────────────────
@@ -402,25 +387,16 @@ namespace Blackjack
         // ─── Strategy confirmation ─────────────────────────────────────────────────
 
         /// <summary>
-        /// Evaluates <paramref name="chosenAction"/> against basic strategy. If correct, or no
-        /// popup is assigned, executes immediately. Otherwise disables buttons and shows the
-        /// deviation popup so the player can keep their action or switch to the recommendation.
+        /// Evaluates <paramref name="chosenAction"/> against basic strategy.
+        /// Correct actions execute immediately. Deviations show the popup:
+        /// "Keep decision" executes the player's choice; "Reconsider" closes the popup
+        /// and returns button control so the player can choose again.
         /// </summary>
         private void ConfirmOrExecute(PlayerAction chosenAction, Action executeChosen)
         {
-            if (basicStrategyAdvisor == null)
-            {
-                executeChosen();
-                return;
-            }
-
-            bool hasSplit     = CanSplit();
-            bool hasDouble    = CanDoubleDown();
-            bool hasSurrender = CanSurrender();
-
-            StrategyEvaluation evaluation = basicStrategyAdvisor.Evaluate(
+            StrategyEvaluation evaluation = _strategyAdvisor.Evaluate(
                 chosenAction, ActiveHand, _dealerUpcardSnapshot,
-                canSplit: hasSplit, canDouble: hasDouble, canSurrender: hasSurrender);
+                canSplit: CanSplit(), canDouble: CanDoubleDown(), canSurrender: CanSurrender());
 
             if (evaluation.IsCorrect || deviationPopup == null)
             {
@@ -428,32 +404,10 @@ namespace Blackjack
                 return;
             }
 
-            // The popup's full-screen background blocks all game-button input while it is
-            // visible, so there is no need to disable the action buttons here.  Disabling
-            // them before showing the popup was the cause of the freeze: if the callback
-            // never fired (or threw before its own SetButtonState call), buttons stayed
-            // locked forever.  Each action coroutine disables and re-enables buttons in
-            // its own flow, so we can hand off cleanly from here.
             deviationPopup.Show(
-                message:          evaluation.DeviationMessage,
-                keepLabel:        $"Keep ({chosenAction})",
-                followLabel:      $"Follow Strategy ({evaluation.Recommendation})",
-                onKeep:           executeChosen,
-                onFollowStrategy: BuildActionForRecommendation(evaluation.Recommendation));
-        }
-
-        /// <summary>Returns an execute delegate for the given strategy recommendation.</summary>
-        private Action BuildActionForRecommendation(StrategyAction recommendation)
-        {
-            return recommendation switch
-            {
-                StrategyAction.Hit       => () => StartCoroutine(PlayerHit()),
-                StrategyAction.Stand     => () => StartCoroutine(AdvanceOrDealerTurn()),
-                StrategyAction.Double    => () => StartCoroutine(PerformDoubleDown()),
-                StrategyAction.Split     => ExecuteSplit,
-                StrategyAction.Surrender => () => StartCoroutine(PlayerSurrender()),
-                _                        => () => StartCoroutine(PlayerHit()),
-            };
+                recommendation: evaluation.Recommendation.ToString(),
+                onKeep:         executeChosen,
+                onReconsider:   null);
         }
 
         /// <summary>Forces the next deal to give the player a natural blackjack, then starts the round.</summary>
@@ -547,9 +501,7 @@ namespace Blackjack
             SetButtonState(dealEnabled: false, actionEnabled: true, splitEnabled: CanSplit(), doubleDownEnabled: CanDoubleDown());
             SetStatus($"Your turn");
 
-            // Snapshot the dealer's visible upcard for strategy evaluation.
             _dealerUpcardSnapshot = _dealerHand.Cards[0];
-
             bool hasPair = CanSplit();
 
             if (!hasPair && _playerHand.BestValue() <= AutoHitMaxScore)

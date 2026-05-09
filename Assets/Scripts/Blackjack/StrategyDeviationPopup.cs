@@ -6,45 +6,35 @@ using UnityEngine.UI;
 namespace Blackjack
 {
     /// <summary>
-    /// Modal popup shown when the player deviates from basic strategy.
-    /// Presents the deviation and lets the player choose to keep their action
-    /// or switch to the basic strategy recommendation.
+    /// Popup shown when the player deviates from basic strategy.
+    /// Displays the strategy recommendation and lets the player keep their decision or reconsider.
     /// </summary>
     public class StrategyDeviationPopup : MonoBehaviour
     {
         [SerializeField] private TextMeshProUGUI messageLabel;
         [SerializeField] private Button keepButton;
-        [SerializeField] private TextMeshProUGUI keepButtonLabel;
-        [SerializeField] private Button followStrategyButton;
-        [SerializeField] private TextMeshProUGUI followStrategyButtonLabel;
+        [SerializeField] private Button reconsiderButton;
 
         private Action _onKeep;
-        private Action _onFollowStrategy;
+        private Action _onReconsider;
 
         private void Awake()
         {
             keepButton.onClick.AddListener(OnKeepClicked);
-            followStrategyButton.onClick.AddListener(OnFollowStrategyClicked);
+            reconsiderButton.onClick.AddListener(OnReconsiderClicked);
             gameObject.SetActive(false);
         }
 
         /// <summary>
-        /// Shows the popup with the given deviation message and button labels.
-        /// Invokes <paramref name="onKeep"/> or <paramref name="onFollowStrategy"/>
-        /// depending on which button the player presses.
+        /// Shows the popup with the strategy recommendation.
+        /// <paramref name="onKeep"/> executes the player's original action.
+        /// <paramref name="onReconsider"/> closes the popup and returns control to the player.
         /// </summary>
-        public void Show(
-            string message,
-            string keepLabel,
-            string followLabel,
-            Action onKeep,
-            Action onFollowStrategy)
+        public void Show(string recommendation, Action onKeep, Action onReconsider)
         {
-            messageLabel.text              = message;
-            keepButtonLabel.text           = keepLabel;
-            followStrategyButtonLabel.text = followLabel;
-            _onKeep                        = onKeep;
-            _onFollowStrategy              = onFollowStrategy;
+            messageLabel.text = $"Strategy recommends: {recommendation}";
+            _onKeep           = onKeep;
+            _onReconsider     = onReconsider;
             gameObject.SetActive(true);
         }
 
@@ -55,17 +45,17 @@ namespace Blackjack
             callback?.Invoke();
         }
 
-        private void OnFollowStrategyClicked()
+        private void OnReconsiderClicked()
         {
-            Action callback = _onFollowStrategy;
+            Action callback = _onReconsider;
             ClearAndHide();
             callback?.Invoke();
         }
 
         private void ClearAndHide()
         {
-            _onKeep           = null;
-            _onFollowStrategy = null;
+            _onKeep       = null;
+            _onReconsider = null;
             gameObject.SetActive(false);
         }
     }
