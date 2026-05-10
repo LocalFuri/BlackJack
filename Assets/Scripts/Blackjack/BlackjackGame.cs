@@ -53,9 +53,6 @@ namespace Blackjack
         [Header("Basic Strategy")]
         [SerializeField] private StrategyDeviationPopup deviationPopup;
 
-        [Header("Effects")]
-        [SerializeField] private FireworksEffect fireworks;
-
         [Header("Audio")] //mark audio
         [SerializeField] private AudioSource audioSource;
 
@@ -490,7 +487,7 @@ namespace Blackjack
                 UpdateScoreLabels(revealDealer: true);
 
                 if (playerBJ && dealerBJ)  { StartCoroutine(PlayDoubleBJSoundRoutine()); SetStatus("Push", PushColor); ApplyPayout(PayoutResult.Push, CurrentBet); }
-                else if (playerBJ)         { ApplyBlackjackGlow(); fireworks.Play(GetPlayerCardsCenter()); PlayNaturalBlackjackSound(); SetStatus("You win", WinColor); ApplyPayout(PayoutResult.BlackjackWin, CurrentBet); }
+                else if (playerBJ)         { ApplyBlackjackGlow(); PlayNaturalBlackjackSound(); SetStatus("You win", WinColor); ApplyPayout(PayoutResult.BlackjackWin, CurrentBet); }
                 else                       { PlayLoseSound();   SetStatus("You lose", LoseColor); ApplyPayout(PayoutResult.Lose, CurrentBet); }
 
                 yield return StartCoroutine(EndRound());
@@ -951,8 +948,6 @@ namespace Blackjack
         /// <summary>Stops fireworks, all audio, and card glow pulses from a blackjack celebration.</summary>
         private void StopBlackjackCelebration()
         {
-            fireworks.Stop();
-
             if (audioSource != null)
                 audioSource.Stop();
 
@@ -1110,28 +1105,6 @@ namespace Blackjack
         {
             _playerScorePulse.StopPulse();
             _splitScorePulse.StopPulse();
-        }
-
-        /// <summary>Returns the center of the first two player cards in the fireworks RectTransform's local space.</summary>
-        private Vector2 GetPlayerCardsCenter()
-        {
-            if (_playerCardViews.Count < 2 || fireworks == null)
-                return Vector2.zero;
-
-            RectTransform fireworksRt = fireworks.GetComponent<RectTransform>();
-            Vector3 worldPos0 = _playerCardViews[0].transform.position;
-            Vector3 worldPos1 = _playerCardViews[1].transform.position;
-            Vector3 worldCenter = (worldPos0 + worldPos1) * 0.5f;
-
-            Vector2 localCenter;
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                fireworksRt,
-                RectTransformUtility.WorldToScreenPoint(null, worldCenter),
-                null,
-                out localCenter
-            );
-
-            return localCenter;
         }
 
         /// <summary>Plays the win sound if both clip and source are assigned.</summary>

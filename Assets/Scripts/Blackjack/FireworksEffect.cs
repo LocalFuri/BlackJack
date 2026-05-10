@@ -1,265 +1,471 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace Blackjack
 {
     /// <summary>
-    /// Realistic procedural fireworks on a UI Canvas.
-    /// Each firework has three phases: shell rise, burst flash, and particle decay with trailing sparks.
-    /// Fully self-contained — no particle system assets required.
+    /// Realistic fireworks built entirely with Unity ParticleSystem components.
+    /// Call Play() with the two player card world positions; the effect will
+    /// confine its bursts to the bounding area of those cards.
+    /// Public API: Play / Stop.
     /// </summary>
     public class FireworksEffect : MonoBehaviour
     {
         [Header("Sequence")]
-        [SerializeField] private Canvas targetCanvas;
         [SerializeField] private int   burstCount    = 7;
-        [SerializeField] private float burstInterval = 0.28f;
-        [SerializeField] private float spread        = 260f;
+        [SerializeField] private float burstInterval = 0.30f;
+        [SerializeField] private float spreadPadding = 1.2f;  // multiplier on card-span to widen area slightly
 
-        [Header("Shell")]
-        [SerializeField] private float shellRiseDuration = 0.35f;
-        [SerializeField] private float shellRiseHeight   = 120f;
+        [Header("Shell Rise")]
+        [SerializeField] private float shellRiseFraction = 0.5f;  // rise as fraction of card-area half-height
+        [SerializeField] private float shellRiseDuration = 0.38f;
 
         [Header("Burst")]
-        [SerializeField] private int   particlesPerBurst = 28;
-        [SerializeField] private float particleLifetime  = 1.4f;
-        [SerializeField] private float minSpeed          = 120f;
-        [SerializeField] private float maxSpeed          = 300f;
-        [SerializeField] private float drag              = 2.8f;   // exponential velocity decay
-        [SerializeField] private float gravity           = 240f;
-        [SerializeField] private float angleJitter       = 14f;    // degrees — breaks perfect radial symmetry
+        [SerializeField] private int   particlesPerBurst  = 80;
+        [SerializeField] private float burstSpeed         = 2.5f;
+        [SerializeField] private float burstSpeedVariance = 0.8f;
+        [SerializeField] private float burstLifetime      = 1.6f;
+        [SerializeField] private float gravityModifier    = 0.4f;
 
-        [Header("Sparks")]
-        [SerializeField] private int   sparksPerParticle = 3;
-        [SerializeField] private float sparkInterval     = 0.18f;
-        [SerializeField] private float sparkLifetime     = 0.35f;
-        [SerializeField] private float sparkSize         = 4f;
+        [Header("Glitter Trail")]
+        [SerializeField] private int   trailParticles = 6;
+        [SerializeField] private float trailLifetime  = 0.5f;
+        [SerializeField] private float trailSize      = 0.004f;
 
-        // Primary burst colors (paired as primary + secondary for each burst)
+        [Header("Rendering")]
+        [SerializeField] private int sortingOrder = 200;
+
+        // Camera is at Z=-10, canvas planeDistance=1 so canvas is at Z=-9.
+        // Particles at Z=-8 are in front of the canvas (closer to camera),
+        // within the frustum (near clip is at Z=-9.7).
+        private const float ParticleZ = -8f;
+
         private static readonly Color[] BurstColors =
         {
-            new Color(1.00f, 0.90f, 0.10f),  // gold
-            new Color(1.00f, 0.28f, 0.28f),  // red
-            new Color(0.25f, 1.00f, 0.35f),  // green
-            new Color(0.25f, 0.55f, 1.00f),  // blue
-            new Color(1.00f, 0.55f, 0.05f),  // orange
-            new Color(0.90f, 0.25f, 1.00f),  // purple
-            new Color(0.20f, 1.00f, 0.95f),  // cyan
-            new Color(1.00f, 1.00f, 1.00f),  // white
+            new Color(1.00f, 0.92f, 0.10f),
+            new Color(1.00f, 0.25f, 0.25f),
+            new Color(0.20f, 1.00f, 0.30f),
+            new Color(0.20f, 0.55f, 1.00f),
+            new Color(1.00f, 0.50f, 0.05f),
+            new Color(0.85f, 0.20f, 1.00f),
+            new Color(0.10f, 1.00f, 0.95f),
+            new Color(1.00f, 1.00f, 1.00f),
         };
 
-        /// <summary>Plays a multi-burst firework sequence at the given canvas position.</summary>
-        public void Play(Vector2 anchoredCenter)
+        private readonly List<GameObject> _activeSystems = new List<GameObject>();
+        private Material _cachedMaterial;
+
+        // ──────────────────────────────────────────────────────────────────────────
+        // Unity lifecycle
+        // ──────────────────────────────────────────────────────────────────────────
+
+        private void Awake()
         {
-            StartCoroutine(FireworksSequence(anchoredCenter));
+            _cachedMaterial = BuildMaterial();
         }
 
-        /// <summary>Stops all running fireworks and destroys any remaining particles.</summary>
+        private void OnDestroy()
+        {
+            if (_cachedMaterial != null)
+                Destroy(_cachedMaterial);
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────
+        // Public API
+        // ──────────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Plays a multi-burst firework sequence confined to the bounding area of the two card positions.
+        /// cardWorldPos0 and cardWorldPos1 are the world-space positions of the player's first two cards.
+        /// </summary>
+        public void Play(Vector3 cardWorldPos0, Vector3 cardWorldPos1)
+        {
+            Vector3 center       = (cardWorldPos0 + cardWorldPos1) * 0.5f;
+            float   cardSpan     = Mathf.Abs(cardWorldPos1.x - cardWorldPos0.x);
+            float   halfSpread   = cardSpan * spreadPadding * 0.5f;
+            float   riseHeight   = cardSpan * shellRiseFraction;
+            StartCoroutine(FireworksSequence(center, halfSpread, riseHeight));
+        }
+
+        /// <summary>Stops all running fireworks and destroys any remaining particle systems.</summary>
         public void Stop()
         {
             StopAllCoroutines();
-
-            if (targetCanvas == null) return;
-
-            Transform root = targetCanvas.transform;
-            for (int i = root.childCount - 1; i >= 0; i--)
+            foreach (GameObject go in _activeSystems)
             {
-                GameObject child = root.GetChild(i).gameObject;
-                if (child.name.StartsWith("FW_"))
-                    Destroy(child);
+                if (go != null)
+                    Destroy(go);
             }
+            _activeSystems.Clear();
         }
 
-        private IEnumerator FireworksSequence(Vector2 center)
+        // ──────────────────────────────────────────────────────────────────────────
+        // Sequence
+        // ──────────────────────────────────────────────────────────────────────────
+
+        private IEnumerator FireworksSequence(Vector3 worldCenter, float halfSpread, float riseHeight)
         {
-            for (int b = 0; b < burstCount; b++)
+            for (int i = 0; i < burstCount; i++)
             {
-                Vector2 launchPos = new Vector2(
-                    center.x + Random.Range(-spread * 0.5f, spread * 0.5f),
-                    center.y + Random.Range(-spread * 0.3f, -spread * 0.05f));
-                StartCoroutine(FireShell(launchPos));
+                Vector3 launchPos = new Vector3(
+                    worldCenter.x + Random.Range(-halfSpread, halfSpread),
+                    worldCenter.y + Random.Range(-halfSpread * 0.4f, halfSpread * 0.1f),
+                    ParticleZ);
+
+                StartCoroutine(FireShell(launchPos, riseHeight));
                 yield return new WaitForSeconds(burstInterval);
             }
         }
 
-        // ── Shell rise ────────────────────────────────────────────────────────────
+        // ──────────────────────────────────────────────────────────────────────────
+        // Shell rise
+        // ──────────────────────────────────────────────────────────────────────────
 
-        private IEnumerator FireShell(Vector2 launchPos)
+        private IEnumerator FireShell(Vector3 launchPos, float worldRiseHeight)
         {
-            // Spawn small shell dot that rises to the burst point
-            GameObject shell = CreateParticle("FW_Shell", launchPos, new Vector2(6f, 6f));
-            Image shellImg   = shell.GetComponent<Image>();
-            shellImg.color   = Color.white;
+            Vector3 burstPos = launchPos + new Vector3(0f, worldRiseHeight, 0f);
 
-            Vector2 burstPos = launchPos + new Vector2(0f, shellRiseHeight);
-            float elapsed    = 0f;
+            GameObject shellGO = CreateParticleSystemObject("FW_Shell");
+            ParticleSystem shellPS = shellGO.GetComponent<ParticleSystem>();
+            ConfigureShellPS(shellPS, launchPos, burstPos);
+            Track(shellGO);
 
-            while (elapsed < shellRiseDuration)
-            {
-                elapsed += Time.deltaTime;
-                float t  = elapsed / shellRiseDuration;
+            yield return new WaitForSeconds(shellRiseDuration + 0.05f);
 
-                shell.GetComponent<RectTransform>().anchoredPosition =
-                    Vector2.Lerp(launchPos, burstPos, Mathf.SmoothStep(0f, 1f, t));
+            _activeSystems.Remove(shellGO);
+            Destroy(shellGO);
 
-                // Flicker trail
-                shellImg.color = new Color(1f, 0.85f, 0.4f, Mathf.Lerp(0.9f, 0.3f, t));
-                yield return null;
-            }
-
-            Destroy(shell);
             SpawnBurst(burstPos);
         }
 
-        // ── Burst ─────────────────────────────────────────────────────────────────
-
-        private void SpawnBurst(Vector2 position)
+        private void ConfigureShellPS(ParticleSystem ps, Vector3 from, Vector3 to)
         {
-            // Pick two complementary colors for this burst
-            int    colorIndexA = Random.Range(0, BurstColors.Length);
-            int    colorIndexB = (colorIndexA + Random.Range(1, 3)) % BurstColors.Length;
-            Color  colorA      = BurstColors[colorIndexA];
-            Color  colorB      = BurstColors[colorIndexB];
+            float worldRiseH = (to - from).magnitude;
+            ps.gameObject.transform.position = from;
 
-            // Flash — bright white circle that fades instantly
-            StartCoroutine(BurstFlash(position, colorA));
+            var main = ps.main;
+            main.loop            = false;
+            main.playOnAwake     = true;
+            main.maxParticles    = 40;
+            main.startLifetime   = new ParticleSystem.MinMaxCurve(shellRiseDuration * 0.55f, shellRiseDuration * 0.75f);
+            main.startSpeed      = new ParticleSystem.MinMaxCurve(0.03f, 0.08f);
+            main.startSize       = new ParticleSystem.MinMaxCurve(0.005f, 0.012f);
+            main.startColor      = new ParticleSystem.MinMaxGradient(
+                new Color(1f, 0.9f, 0.5f, 0.9f),
+                new Color(1f, 0.7f, 0.2f, 0.6f));
+            main.gravityModifier = -0.1f;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
 
-            float angleStep = 360f / particlesPerBurst;
+            var emission = ps.emission;
+            emission.enabled      = true;
+            emission.rateOverTime = 80;
 
-            for (int i = 0; i < particlesPerBurst; i++)
-            {
-                // Jitter the angle so burst isn't perfectly uniform
-                float angle  = (angleStep * i + Random.Range(-angleJitter, angleJitter)) * Mathf.Deg2Rad;
-                float speed  = Random.Range(minSpeed, maxSpeed);
-                Vector2 dir  = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+            var shape = ps.shape;
+            shape.enabled   = true;
+            shape.shapeType = ParticleSystemShapeType.Cone;
+            shape.angle     = 5f;
+            shape.radius    = 0.02f;
 
-                // Alternate colors between primary and secondary
-                Color  col  = (i % 2 == 0) ? colorA : colorB;
-                float  size = Random.Range(6f, 11f);
+            Vector3 dir = (to - from).normalized;
+            ps.gameObject.transform.rotation =
+                Quaternion.LookRotation(Vector3.forward, dir) * Quaternion.Euler(-90f, 0f, 0f);
 
-                StartCoroutine(AnimateParticle(position, dir * speed, col, size));
-            }
+            var vel = ps.velocityOverLifetime;
+            vel.enabled = true;
+            vel.space   = ParticleSystemSimulationSpace.World;
+            vel.y       = new ParticleSystem.MinMaxCurve(
+                worldRiseH / shellRiseDuration * 0.6f,
+                worldRiseH / shellRiseDuration * 1.0f);
+
+            var sol = ps.sizeOverLifetime;
+            sol.enabled = true;
+            sol.size    = new ParticleSystem.MinMaxCurve(1f, CurveDecelerate());
+
+            var col = ps.colorOverLifetime;
+            col.enabled = true;
+            Gradient g = new Gradient();
+            g.SetKeys(
+                new GradientColorKey[] {
+                    new GradientColorKey(Color.white,               0f),
+                    new GradientColorKey(new Color(1f, 0.6f, 0.1f), 1f)
+                },
+                new GradientAlphaKey[] {
+                    new GradientAlphaKey(1f,   0f),
+                    new GradientAlphaKey(0.6f, 0.5f),
+                    new GradientAlphaKey(0f,   1f)
+                });
+            col.color = new ParticleSystem.MinMaxGradient(g);
+
+            ApplyRenderer(ps, sortingOrder - 1);
+            ps.Play();
         }
 
-        private IEnumerator BurstFlash(Vector2 position, Color color)
+        // ──────────────────────────────────────────────────────────────────────────
+        // Burst explosion
+        // ──────────────────────────────────────────────────────────────────────────
+
+        private void SpawnBurst(Vector3 position)
         {
-            GameObject flash    = CreateParticle("FW_Flash", position, new Vector2(60f, 60f));
-            Image      flashImg = flash.GetComponent<Image>();
+            Color colorA = BurstColors[Random.Range(0, BurstColors.Length)];
+            Color colorB = BurstColors[Random.Range(0, BurstColors.Length)];
 
-            float elapsed = 0f;
-            float duration = 0.12f;
+            StartCoroutine(SpawnFlash(position, colorA));
 
-            while (elapsed < duration)
-            {
-                elapsed += Time.deltaTime;
-                float t  = elapsed / duration;
-                flashImg.color = new Color(color.r, color.g, color.b, Mathf.Lerp(0.9f, 0f, t));
-                flash.GetComponent<RectTransform>().localScale = Vector3.one * Mathf.Lerp(0.4f, 1.6f, t);
-                yield return null;
-            }
+            GameObject burstGO = CreateParticleSystemObject("FW_Burst");
+            burstGO.transform.position = position;
+            ParticleSystem burstPS = burstGO.GetComponent<ParticleSystem>();
+            ConfigureBurstPS(burstPS, colorA, colorB);
+            Track(burstGO);
 
-            Destroy(flash);
+            GameObject glitterGO = new GameObject("FW_Glitter");
+            glitterGO.transform.SetParent(burstGO.transform, false);
+            glitterGO.transform.localPosition = Vector3.zero;
+            ParticleSystem glitterPS = glitterGO.AddComponent<ParticleSystem>();
+            ConfigureGlitterPS(glitterPS, colorA);
+
+            var sub = burstPS.subEmitters;
+            sub.enabled = true;
+            sub.AddSubEmitter(
+                glitterPS,
+                ParticleSystemSubEmitterType.Birth,
+                ParticleSystemSubEmitterProperties.InheritColor);
+
+            burstPS.Play();
+
+            StartCoroutine(DestroyAfter(burstGO, burstLifetime + trailLifetime + 0.5f));
         }
 
-        // ── Particle ──────────────────────────────────────────────────────────────
-
-        private IEnumerator AnimateParticle(Vector2 startPos, Vector2 velocity, Color color, float size)
+        private void ConfigureBurstPS(ParticleSystem ps, Color colorA, Color colorB)
         {
-            GameObject  pGO = CreateParticle("FW_Particle", startPos, new Vector2(size, size));
-            RectTransform rt  = pGO.GetComponent<RectTransform>();
-            Image         img = pGO.GetComponent<Image>();
+            var main = ps.main;
+            main.loop            = false;
+            main.playOnAwake     = false;
+            main.maxParticles    = particlesPerBurst + 20;
+            main.startLifetime   = new ParticleSystem.MinMaxCurve(burstLifetime * 0.7f, burstLifetime);
+            main.startSpeed      = new ParticleSystem.MinMaxCurve(burstSpeed - burstSpeedVariance, burstSpeed + burstSpeedVariance);
+            main.startSize       = new ParticleSystem.MinMaxCurve(0.008f, 0.018f);
+            main.startColor      = new ParticleSystem.MinMaxGradient(colorA, colorB);
+            main.gravityModifier = gravityModifier;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
 
-            float elapsed      = 0f;
-            float sparkTimer   = 0f;
-            int   sparksSpawned = 0;
-
-            // Initial flash size — briefly larger then shrinks
-            float flashScale = Random.Range(1.6f, 2.2f);
-
-            while (elapsed < particleLifetime)
+            var emission = ps.emission;
+            emission.rateOverTime = 0;
+            emission.SetBursts(new ParticleSystem.Burst[]
             {
-                float dt = Time.deltaTime;
-                elapsed     += dt;
-                sparkTimer  += dt;
-                float t      = elapsed / particleLifetime;
+                new ParticleSystem.Burst(0f, (short)particlesPerBurst)
+            });
 
-                // Physics: drag + gravity
-                velocity   *= Mathf.Exp(-drag * dt);
-                velocity.y -= gravity * dt;
-                rt.anchoredPosition += velocity * dt;
+            var shape = ps.shape;
+            shape.enabled         = true;
+            shape.shapeType       = ParticleSystemShapeType.Sphere;
+            shape.radius          = 0.05f;
+            shape.radiusThickness = 0f;
 
-                // Scale: flash large at start, shrink smoothly
-                float scale = Mathf.Lerp(flashScale, 0.2f, Mathf.Pow(t, 0.6f));
-                rt.localScale = Vector3.one * scale;
+            var limitVel = ps.limitVelocityOverLifetime;
+            limitVel.enabled = true;
+            limitVel.limit   = new ParticleSystem.MinMaxCurve(1f, CurveDecelerate());
+            limitVel.dampen  = 0.15f;
 
-                // Alpha: hold bright for first half, then drop sharply
-                float alpha = t < 0.5f
-                    ? 1f
-                    : Mathf.Pow(1f - ((t - 0.5f) / 0.5f), 1.8f);
+            var sol = ps.sizeOverLifetime;
+            sol.enabled = true;
+            sol.size    = new ParticleSystem.MinMaxCurve(1f, CurveDecelerate());
 
-                img.color = new Color(color.r, color.g, color.b, alpha);
+            var col = ps.colorOverLifetime;
+            col.enabled = true;
+            col.color   = new ParticleSystem.MinMaxGradient(BuildBurstGradient(colorA));
 
-                // Spawn trailing sparks at intervals
-                if (sparkTimer >= sparkInterval && sparksSpawned < sparksPerParticle)
-                {
-                    sparkTimer = 0f;
-                    sparksSpawned++;
-                    StartCoroutine(AnimateSpark(rt.anchoredPosition, color));
-                }
+            var noise = ps.noise;
+            noise.enabled     = true;
+            noise.strength    = new ParticleSystem.MinMaxCurve(0.15f);
+            noise.frequency   = 0.8f;
+            noise.scrollSpeed = new ParticleSystem.MinMaxCurve(0.2f);
+            noise.quality     = ParticleSystemNoiseQuality.Medium;
+            noise.damping     = true;
 
-                yield return null;
-            }
-
-            Destroy(pGO);
+            ApplyRenderer(ps, sortingOrder);
         }
 
-        // ── Spark ─────────────────────────────────────────────────────────────────
-
-        private IEnumerator AnimateSpark(Vector2 startPos, Color color)
+        private void ConfigureGlitterPS(ParticleSystem ps, Color baseColor)
         {
-            GameObject    sGO = CreateParticle("FW_Spark", startPos, new Vector2(sparkSize, sparkSize));
-            RectTransform rt  = sGO.GetComponent<RectTransform>();
-            Image         img = sGO.GetComponent<Image>();
+            var main = ps.main;
+            main.loop            = false;
+            main.playOnAwake     = false;
+            main.maxParticles    = particlesPerBurst * trailParticles;
+            main.startLifetime   = new ParticleSystem.MinMaxCurve(trailLifetime * 0.5f, trailLifetime);
+            main.startSpeed      = new ParticleSystem.MinMaxCurve(0.3f, 1.2f);
+            main.startSize       = new ParticleSystem.MinMaxCurve(trailSize * 0.5f, trailSize);
+            main.startColor      = new ParticleSystem.MinMaxGradient(
+                new Color(1f, 1f, 0.8f, 1f),
+                new Color(baseColor.r, baseColor.g, baseColor.b, 0.85f));
+            main.gravityModifier = gravityModifier * 0.7f;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
 
-            // Sparks shoot off at a small random angle
-            float angle    = Random.Range(0f, 360f) * Mathf.Deg2Rad;
-            Vector2 vel    = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * Random.Range(20f, 60f);
-            float elapsed  = 0f;
-
-            while (elapsed < sparkLifetime)
+            var emission = ps.emission;
+            emission.rateOverTime = 0;
+            emission.SetBursts(new ParticleSystem.Burst[]
             {
-                float dt   = Time.deltaTime;
-                elapsed   += dt;
-                float t    = elapsed / sparkLifetime;
+                new ParticleSystem.Burst(0f, (short)trailParticles)
+            });
 
-                vel.y -= gravity * 0.5f * dt;
-                rt.anchoredPosition += vel * dt;
+            var shape = ps.shape;
+            shape.enabled   = true;
+            shape.shapeType = ParticleSystemShapeType.Sphere;
+            shape.radius    = 0.01f;
 
-                img.color     = new Color(1f, Mathf.Lerp(0.9f, 0.3f, t), 0f, 1f - t);
-                rt.localScale = Vector3.one * Mathf.Lerp(1f, 0f, t);
-                yield return null;
-            }
+            var col = ps.colorOverLifetime;
+            col.enabled = true;
+            Gradient g = new Gradient();
+            g.SetKeys(
+                new GradientColorKey[] {
+                    new GradientColorKey(Color.white,               0f),
+                    new GradientColorKey(new Color(1f, 0.9f, 0.3f), 0.6f),
+                    new GradientColorKey(new Color(0.5f, 0.2f, 0f), 1f)
+                },
+                new GradientAlphaKey[] {
+                    new GradientAlphaKey(1f,   0f),
+                    new GradientAlphaKey(0.6f, 0.5f),
+                    new GradientAlphaKey(0f,   1f)
+                });
+            col.color = new ParticleSystem.MinMaxGradient(g);
 
-            Destroy(sGO);
+            var sol = ps.sizeOverLifetime;
+            sol.enabled = true;
+            sol.size    = new ParticleSystem.MinMaxCurve(1f, CurveDecelerate());
+
+            ApplyRenderer(ps, sortingOrder + 1);
         }
 
-        // ── Helpers ───────────────────────────────────────────────────────────────
+        // ──────────────────────────────────────────────────────────────────────────
+        // Flash
+        // ──────────────────────────────────────────────────────────────────────────
 
-        private GameObject CreateParticle(string goName, Vector2 anchoredPos, Vector2 size)
+        private IEnumerator SpawnFlash(Vector3 position, Color color)
         {
-            GameObject go = new GameObject(goName);
-            go.transform.SetParent(targetCanvas.transform, false);
+            GameObject flashGO = CreateParticleSystemObject("FW_Flash");
+            flashGO.transform.position = position;
+            Track(flashGO);
 
-            RectTransform rt   = go.AddComponent<RectTransform>();
-            rt.sizeDelta        = size;
-            rt.anchoredPosition = anchoredPos;
+            ParticleSystem flashPS = flashGO.GetComponent<ParticleSystem>();
 
-            Image img  = go.AddComponent<Image>();
-            img.color  = Color.white;
-            img.raycastTarget = false;
+            var main = flashPS.main;
+            main.loop            = false;
+            main.playOnAwake     = false;
+            main.maxParticles    = 1;
+            main.startLifetime   = 0.18f;
+            main.startSpeed      = 0f;
+            main.startSize       = new ParticleSystem.MinMaxCurve(0.08f, 0.15f);
+            main.startColor      = Color.white;
+            main.gravityModifier = 0f;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
 
+            var emission = flashPS.emission;
+            emission.rateOverTime = 0;
+            emission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, 1) });
+
+            var shape = flashPS.shape;
+            shape.enabled   = true;
+            shape.shapeType = ParticleSystemShapeType.Sphere;
+            shape.radius    = 0f;
+
+            var col = flashPS.colorOverLifetime;
+            col.enabled = true;
+            Gradient g = new Gradient();
+            g.SetKeys(
+                new GradientColorKey[] {
+                    new GradientColorKey(Color.white, 0f),
+                    new GradientColorKey(color,       0.5f)
+                },
+                new GradientAlphaKey[] {
+                    new GradientAlphaKey(1f, 0f),
+                    new GradientAlphaKey(0f, 1f)
+                });
+            col.color = new ParticleSystem.MinMaxGradient(g);
+
+            var sol = flashPS.sizeOverLifetime;
+            sol.enabled = true;
+            sol.size    = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
+                new Keyframe(0f,   0.3f),
+                new Keyframe(0.5f, 1f),
+                new Keyframe(1f,   1.8f)));
+
+            ApplyRenderer(flashPS, sortingOrder + 2);
+            flashPS.Play();
+
+            yield return new WaitForSeconds(0.25f);
+            _activeSystems.Remove(flashGO);
+            Destroy(flashGO);
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────
+        // Helpers
+        // ──────────────────────────────────────────────────────────────────────────
+
+        private GameObject CreateParticleSystemObject(string goName)
+        {
+            var go = new GameObject(goName);
+            go.AddComponent<ParticleSystem>();
             return go;
+        }
+
+        /// <summary>
+        /// Builds the shared particle material once in Awake.
+        /// Uses Sprites/Default which is always available in URP and Built-in.
+        /// </summary>
+        private static Material BuildMaterial()
+        {
+            return new Material(Shader.Find("Sprites/Default"))
+            {
+                color = Color.white
+            };
+        }
+
+        private void ApplyRenderer(ParticleSystem ps, int order)
+        {
+            ParticleSystemRenderer r = ps.GetComponent<ParticleSystemRenderer>();
+            r.renderMode       = ParticleSystemRenderMode.Billboard;
+            r.sortingLayerName = "Default";
+            r.sortingOrder     = order;
+            r.material         = _cachedMaterial;
+        }
+
+        private void Track(GameObject go) => _activeSystems.Add(go);
+
+        private IEnumerator DestroyAfter(GameObject go, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (go != null)
+            {
+                _activeSystems.Remove(go);
+                Destroy(go);
+            }
+        }
+
+        private static AnimationCurve CurveDecelerate()
+        {
+            return new AnimationCurve(
+                new Keyframe(0f,   1f,  0f,   -2f),
+                new Keyframe(0.6f, 0.4f),
+                new Keyframe(1f,   0f, -0.5f,  0f));
+        }
+
+        private static Gradient BuildBurstGradient(Color color)
+        {
+            Gradient g = new Gradient();
+            g.SetKeys(
+                new GradientColorKey[]
+                {
+                    new GradientColorKey(Color.white,  0f),
+                    new GradientColorKey(color,        0.15f),
+                    new GradientColorKey(color * 0.6f, 1f)
+                },
+                new GradientAlphaKey[]
+                {
+                    new GradientAlphaKey(1f, 0f),
+                    new GradientAlphaKey(1f, 0.4f),
+                    new GradientAlphaKey(0f, 1f)
+                });
+            return g;
         }
     }
 }
