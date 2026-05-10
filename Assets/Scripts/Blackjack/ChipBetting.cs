@@ -339,23 +339,23 @@ namespace Blackjack
 
         private void OnChipResetClicked()
         {
-          if (blackjackGame != null)
-          {
-            if (blackjackGame.IsLimitPulsing)
-              return;
+            if (blackjackGame != null)
+            {
+                if (blackjackGame.IsLimitPulsing)
+                    return;
 
-            if (blackjackGame.IsRoundOver)
-              blackjackGame.PrepareForBetting();
-            else if (!blackjackGame.IsBettingAllowed)
-              return;
-          }
+                if (blackjackGame.IsRoundOver)
+                    blackjackGame.PrepareForBetting();
+                else if (!blackjackGame.IsBettingAllowed)
+                    return;
+            }
 
-          if (HasMoreThanMinimumBet())
-            chipResetSound.Play(audioSource);
-          else
-            blackjackGame?.PlayKnockSound();
+            if (TotalBet > 0)
+                chipResetSound.Play(audioSource);
+            else
+                blackjackGame?.PlayKnockSound();
 
-          ResetToMinimumBet();
+            ClearBetArea();
         }
 
         private void OnChipMaxClicked()

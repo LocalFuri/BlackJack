@@ -93,7 +93,7 @@ namespace Blackjack
         // ──────────────────────────────────────────────────────────────────────────
 
         private const int AutoStandHard      = 17;
-        private const int AutoStandSoft      = 18;
+        private const int AutoStandSoft      = 19;
         private const int AutoHitMaxScore    = 0; //disable
         private const int DealerSoft17       = 17;
         private const int BlackjackValue     = 21;
@@ -511,9 +511,7 @@ namespace Blackjack
                 yield break;
             }
 
-            bool shouldStand = hasPair
-                ? _playerHand.BestValue() == 20
-                : ShouldAutoStand(_playerHand);
+            bool shouldStand = ShouldAutoStand(_playerHand);
 
             if (shouldStand)
             {
@@ -570,7 +568,7 @@ namespace Blackjack
                 yield break;
             }
 
-            SetButtonState(dealEnabled: false, actionEnabled: true, splitEnabled: false);
+            SetButtonState(dealEnabled: false, actionEnabled: true, splitEnabled: false, doubleDownEnabled: CanDoubleDown());
             SetStatus($"Players turn Hand 1");
 
             if (ActiveHand.BestValue() <= AutoHitMaxScore)
@@ -591,7 +589,7 @@ namespace Blackjack
         // ── Double Down ───────────────────────────────────────────────────────────
 
         private bool CanDoubleDown() =>
-            ActiveHand.Cards.Count == 2 && !_isSplitRound;
+            ActiveHand.Cards.Count == 2;
 
         private IEnumerator PerformDoubleDown()
         {
@@ -624,7 +622,7 @@ namespace Blackjack
                 yield break;
             }
 
-            SetStatus($"Double Down stands at {ActiveHand.BestValue()}.");
+            SetStatus($"Double Down stands at {ActiveHand.BestValue()}");
             yield return new WaitForSeconds(dealerPauseDelay);
             yield return StartCoroutine(AdvanceOrDealerTurn());
         }
@@ -636,7 +634,7 @@ namespace Blackjack
                 _activeHandIndex = 1;
                 UpdateScoreLabels(revealDealer: false);
                 SetStatus($"Players turn Hand 2");
-                SetButtonState(dealEnabled: false, actionEnabled: true, splitEnabled: false);
+                SetButtonState(dealEnabled: false, actionEnabled: true, splitEnabled: false, doubleDownEnabled: CanDoubleDown());
 
                 if (ActiveHand.BestValue() <= AutoHitMaxScore)
                 {
@@ -752,14 +750,11 @@ namespace Blackjack
         }
 
         /// <summary>
-        /// Dealer hits below 17, and also hits on soft 17 (a 17 with an Ace counted as 11).
+        /// Dealer hits below 17 and stands on 17 or higher (including soft 17).
         /// </summary>
         private bool ShouldDealerHit()
         {
-            int value = _dealerHand.BestValue();
-            if (value < DealerSoft17) return true;
-            if (value == DealerSoft17 && _dealerHand.IsSoft()) return true;
-            return false;
+            return _dealerHand.BestValue() < DealerSoft17;
         }
 
         // ──────────────────────────────────────────────────────────────────────────
