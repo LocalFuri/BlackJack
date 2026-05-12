@@ -8,6 +8,7 @@ namespace Blackjack
     /// <summary>
     /// Toggles the developer menu panel with F2.
     /// Controls visibility of the three test buttons and the master volume.
+    /// All changes are persisted to disk via <see cref="SettingsRepository"/>.
     /// </summary>
     public class MenuController : MonoBehaviour
     {
@@ -18,17 +19,21 @@ namespace Blackjack
         [SerializeField] private GameObject blackjackTestButton;
         [SerializeField] private GameObject bjAllButton;
         [SerializeField] private GameObject ddTestButton;
+        [SerializeField] private GameObject testSplitButton;
 
         [Header("Checkboxes")]
         [SerializeField] private Toggle blackjackTestToggle;
         [SerializeField] private Toggle bjAllToggle;
         [SerializeField] private Toggle ddTestToggle;
+        [SerializeField] private Toggle testSplitToggle;
 
         [Header("Volume")]
-        [SerializeField] private Slider  volumeSlider;
+        [SerializeField] private Slider volumeSlider;
         [SerializeField] private AudioMixer audioMixer;
 
         private const string MasterVolumeParam = "MasterVolume";
+
+        private OptionsSettings _settings;
 
         // ──────────────────────────────────────────────────────────────────────────
         // Unity lifecycle
@@ -36,29 +41,15 @@ namespace Blackjack
 
         private void Awake()
         {
-            // Sync toggle initial state with button visibility.
-            if (blackjackTestToggle != null && blackjackTestButton != null)
-                blackjackTestToggle.SetIsOnWithoutNotify(blackjackTestButton.activeSelf);
+            _settings = SettingsRepository.Load();
 
-            if (bjAllToggle != null && bjAllButton != null)
-                bjAllToggle.SetIsOnWithoutNotify(bjAllButton.activeSelf);
+            ApplySettings();
 
-            if (ddTestToggle != null && ddTestButton != null)
-                ddTestToggle.SetIsOnWithoutNotify(ddTestButton.activeSelf);
-
-            // Sync slider initial state with current audio mixer value.
-            if (volumeSlider != null && audioMixer != null)
-            {
-                if (audioMixer.GetFloat(MasterVolumeParam, out float dB))
-                    volumeSlider.SetValueWithoutNotify(DbToLinear(dB));
-                else
-                    volumeSlider.SetValueWithoutNotify(1f);
-            }
-
-            // Register callbacks.
+            // Register callbacks after applying so initial apply does not trigger saves.
             blackjackTestToggle?.onValueChanged.AddListener(OnBlackjackTestToggled);
             bjAllToggle?.onValueChanged.AddListener(OnBjAllToggled);
             ddTestToggle?.onValueChanged.AddListener(OnDdTestToggled);
+            testSplitToggle?.onValueChanged.AddListener(OnTestSplitToggled);
             volumeSlider?.onValueChanged.AddListener(OnVolumeChanged);
 
             menuPanel?.SetActive(false);
@@ -80,19 +71,41 @@ namespace Blackjack
         // Toggle callbacks
         // ──────────────────────────────────────────────────────────────────────────
 
-        private void OnBlackjackTestToggled(bool value) =>
+        private void OnBlackjackTestToggled(bool value)
+        {
             blackjackTestButton?.SetActive(value);
+            _settings.blackjackTestEnabled = value;
+            SettingsRepository.Save(_settings);
+        }
 
-        private void OnBjAllToggled(bool value) =>
+        private void OnBjAllToggled(bool value)
+        {
             bjAllButton?.SetActive(value);
+            _settings.bjAllEnabled = value;
+            SettingsRepository.Save(_settings);
+        }
 
-        private void OnDdTestToggled(bool value) =>
+        private void OnDdTestToggled(bool value)
+        {
             ddTestButton?.SetActive(value);
+            _settings.ddTestEnabled = value;
+            SettingsRepository.Save(_settings);
+        }
+
+        private void OnTestSplitToggled(bool value)
+        {
+            testSplitButton?.SetActive(value);
+            _settings.testSplitEnabled = value;
+            SettingsRepository.Save(_settings);
+        }
 
         private void OnVolumeChanged(float linear)
         {
             if (audioMixer != null)
                 audioMixer.SetFloat(MasterVolumeParam, LinearToDb(linear));
+
+            _settings.volume = linear;
+            SettingsRepository.Save(_settings);
         }
 
         // ──────────────────────────────────────────────────────────────────────────
@@ -104,6 +117,32 @@ namespace Blackjack
         {
             if (menuPanel == null) return;
             menuPanel.SetActive(!menuPanel.activeSelf);
+        }
+
+        /// <summary>Pushes all loaded settings into the UI and the AudioMixer.</summary>
+        private void ApplySettings()
+        {
+            if (blackjackTestToggle != null)
+                blackjackTestToggle.SetIsOnWithoutNotify(_settings.blackjackTestEnabled);
+            blackjackTestButton?.SetActive(_settings.blackjackTestEnabled);
+
+            if (bjAllToggle != null)
+                bjAllToggle.SetIsOnWithoutNotify(_settings.bjAllEnabled);
+            bjAllButton?.SetActive(_settings.bjAllEnabled);
+
+            if (ddTestToggle != null)
+                ddTestToggle.SetIsOnWithoutNotify(_settings.ddTestEnabled);
+            ddTestButton?.SetActive(_settings.ddTestEnabled);
+
+            if (testSplitToggle != null)
+                testSplitToggle.SetIsOnWithoutNotify(_settings.testSplitEnabled);
+            testSplitButton?.SetActive(_settings.testSplitEnabled);
+
+            if (volumeSlider != null)
+                volumeSlider.SetValueWithoutNotify(_settings.volume);
+
+            if (audioMixer != null)
+                audioMixer.SetFloat(MasterVolumeParam, LinearToDb(_settings.volume));
         }
 
         // Converts a linear [0,1] slider value to decibels for the AudioMixer.

@@ -1,0 +1,18 @@
+using System;
+
+namespace Blackjack
+{
+    /// <summary>
+    /// Plain data container for all options menu settings.
+    /// Serialized to and from JSON by <see cref="SettingsRepository"/>.
+    /// </summary>
+    [Serializable]
+    public class OptionsSettings
+    {
+        public bool blackjackTestEnabled = true;
+        public bool bjAllEnabled         = true;
+        public bool ddTestEnabled        = true;
+        public bool testSplitEnabled     = true;
+        public float volume              = 1f;
+    }
+}
