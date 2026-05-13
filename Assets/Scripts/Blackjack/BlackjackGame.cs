@@ -38,6 +38,9 @@ namespace Blackjack
         [SerializeField] private Button doubleDownButton;
         [SerializeField] private Button ddTestButton;
 
+        [Header("Menu")]
+        [SerializeField] private MenuController menuController;
+
         [Header("Score Labels")]
         [SerializeField] private TextMeshProUGUI playerScoreLabel;
         [SerializeField] private TextMeshProUGUI dealerScoreLabel;
@@ -149,6 +152,16 @@ namespace Blackjack
 
         /// <summary>True when the current round has ended and the table is showing results.</summary>
         public bool IsRoundOver => _state == GameState.RoundOver;
+
+        /// <summary>True while the developer menu is open. Used by <see cref="ChipBetting"/> to suppress chip input.</summary>
+        public bool IsMenuOpen => menuController != null && menuController.IsMenuOpen;
+
+        /// <summary>Closes the menu panel. Used by <see cref="ChipBetting"/> when a bet action is taken during the betting phase.</summary>
+        public void CloseMenu() => menuController?.CloseMenu();
+
+        /// <summary>Returns true when the menu is open and a round is already in progress — input should be suppressed.</summary>
+        private bool IsMenuBlocking => menuController != null && menuController.IsMenuOpen
+            && (_state == GameState.PlayerTurn || _state == GameState.DealerTurn);
 
         /// <summary>
         /// Transitions from RoundOver back to Idle, clearing the table and prompting the player to bet.
@@ -279,6 +292,7 @@ namespace Blackjack
         public void OnDeal()
         {
             if (_state != GameState.Idle && _state != GameState.RoundOver) return;
+            dealButton.gameObject.SetActive(false);
             StopBlackjackCelebration();
             StartNewRound();
         }
@@ -290,6 +304,7 @@ namespace Blackjack
         private void StartNewRound()
         {
             if (_doubleBJSoundPlaying) return;
+            menuController?.CloseMenu();
             EnsureMinimumBet();
             _savedBetBeforeAction = 0;
             _playerMoney -= CurrentBet;
@@ -315,6 +330,7 @@ namespace Blackjack
         /// <summary>Player draws another card.</summary>
         public void OnHit()
         {
+            if (IsMenuBlocking) return;
             if (_state != GameState.PlayerTurn) return;
             ConfirmOrExecute(PlayerAction.Hit, () => StartCoroutine(PlayerHit()));
         }
@@ -322,6 +338,7 @@ namespace Blackjack
         /// <summary>Player ends their turn; advances to split hand or dealer turn.</summary>
         public void OnStand()
         {
+            if (IsMenuBlocking) return;
             if (_state != GameState.PlayerTurn) return;
             ConfirmOrExecute(PlayerAction.Stand, () => StartCoroutine(AdvanceOrDealerTurn()));
         }
@@ -329,6 +346,7 @@ namespace Blackjack
         /// <summary>Player surrenders — forfeits half their bet and ends the round immediately.</summary>
         public void OnSurrender()
         {
+            if (IsMenuBlocking) return;
             if (_state != GameState.PlayerTurn) return;
             ConfirmOrExecute(PlayerAction.Surrender, () => StartCoroutine(PlayerSurrender()));
         }
@@ -355,6 +373,7 @@ namespace Blackjack
         /// </summary>
         public void OnSplit()
         {
+            if (IsMenuBlocking) return;
             if (_state != GameState.PlayerTurn) return;
             if (!CanSplit()) return;
             ConfirmOrExecute(PlayerAction.Split, ExecuteSplit);
@@ -376,6 +395,7 @@ namespace Blackjack
         /// </summary>
         public void OnDoubleDown()
         {
+            if (IsMenuBlocking) return;
             if (_state != GameState.PlayerTurn) return;
             if (ActiveHand.Cards.Count != 2) return;
             ConfirmOrExecute(PlayerAction.Double, () => StartCoroutine(PerformDoubleDown()));
@@ -1197,6 +1217,7 @@ namespace Blackjack
         private void SetButtonState(bool dealEnabled, bool actionEnabled, bool splitEnabled, bool doubleDownEnabled = false)
         {
             dealButton.interactable      = dealEnabled;
+            dealButton.gameObject.SetActive(dealEnabled);
             hitButton.interactable       = actionEnabled;
             standButton.interactable     = actionEnabled;
             surrenderButton.interactable = actionEnabled;

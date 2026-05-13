@@ -112,11 +112,21 @@ namespace Blackjack
         // Helpers
         // ──────────────────────────────────────────────────────────────────────────
 
+        /// <summary>True while the menu panel is visible.</summary>
+        public bool IsMenuOpen => menuPanel != null && menuPanel.activeSelf;
+
         /// <summary>Shows or hides the menu panel.</summary>
         private void ToggleMenu()
         {
             if (menuPanel == null) return;
             menuPanel.SetActive(!menuPanel.activeSelf);
+        }
+
+        /// <summary>Closes the menu panel if it is currently open.</summary>
+        public void CloseMenu()
+        {
+            if (menuPanel != null && menuPanel.activeSelf)
+                menuPanel.SetActive(false);
         }
 
         /// <summary>Pushes all loaded settings into the UI and the AudioMixer.</summary>

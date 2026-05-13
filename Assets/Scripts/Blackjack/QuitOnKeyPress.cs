@@ -19,7 +19,15 @@ namespace Blackjack
         {
             if (_isQuitting) return;
             if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) //qKey etc.
+            {
+                if (gameManager != null && gameManager.IsMenuOpen)
+                {
+                    gameManager.CloseMenu();
+                    return;
+                }
+
                 StartCoroutine(PlaySoundThenQuit());
+            }
         }
 
         private IEnumerator PlaySoundThenQuit()

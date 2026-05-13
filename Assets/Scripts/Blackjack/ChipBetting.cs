@@ -341,6 +341,13 @@ namespace Blackjack
         {
             if (blackjackGame != null)
             {
+                if (blackjackGame.IsMenuOpen)
+                {
+                    if (!blackjackGame.IsBettingAllowed && !blackjackGame.IsRoundOver)
+                        return;
+                    blackjackGame.CloseMenu();
+                }
+
                 if (blackjackGame.IsLimitPulsing)
                     return;
 
@@ -362,6 +369,13 @@ namespace Blackjack
         {
             if (blackjackGame != null)
             {
+                if (blackjackGame.IsMenuOpen)
+                {
+                    if (!blackjackGame.IsBettingAllowed && !blackjackGame.IsRoundOver)
+                        return;
+                    blackjackGame.CloseMenu();
+                }
+
                 if (blackjackGame.IsLimitPulsing)
                     return;
 
@@ -399,6 +413,13 @@ namespace Blackjack
 
             if (blackjackGame != null)
             {
+                if (blackjackGame.IsMenuOpen)
+                {
+                    if (!blackjackGame.IsBettingAllowed && !blackjackGame.IsRoundOver)
+                        return;
+                    blackjackGame.CloseMenu();
+                }
+
                 if (blackjackGame.IsLimitPulsing)
                     return;
 
@@ -429,6 +450,13 @@ namespace Blackjack
 
             if (blackjackGame != null)
             {
+                if (blackjackGame.IsMenuOpen)
+                {
+                    if (!blackjackGame.IsBettingAllowed && !blackjackGame.IsRoundOver)
+                        return;
+                    blackjackGame.CloseMenu();
+                }
+
                 if (blackjackGame.IsLimitPulsing)
                     return;
 
