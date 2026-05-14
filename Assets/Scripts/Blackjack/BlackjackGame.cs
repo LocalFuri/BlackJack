@@ -322,6 +322,14 @@ namespace Blackjack
         {
             if (_doubleBJSoundPlaying) return;
             menuController?.CloseMenu();
+
+            // Restore chips to pre-split/double-down state before the new round begins.
+            if (_savedBetBeforeAction > 0 && chipBetting != null)
+            {
+                chipBetting.RestoreBet(_savedBetBeforeAction);
+                _savedBetBeforeAction = 0;
+            }
+
             EnsureMinimumBet();
             _savedBetBeforeAction = 0;
             _playerMoney -= CurrentBet;
@@ -376,10 +384,9 @@ namespace Blackjack
             yield return StartCoroutine(RevealHoleCard());
             UpdateScoreLabels(revealDealer: true);
 
-            
-      surrenderSound.Play(audioSource);
-      SetStatus("Surrender returns 1/2 of bet", SurrenderColor);
-      ApplyPayout(PayoutResult.Surrender, CurrentBet);
+            surrenderSound.Play(audioSource);
+            SetStatus("<size=40>Surrender returns 1/2 of bet</size>", SurrenderColor);
+            ApplyPayout(PayoutResult.Surrender, CurrentBet);
 
             yield return StartCoroutine(EndRound());
         }
@@ -635,7 +642,7 @@ namespace Blackjack
             _doubleDownExtraBet = CurrentBet;
             _playerMoney -= _doubleDownExtraBet;
             RefreshMoneyLabel();
-            chipBetting?.DoubleBetLabel();
+            chipBetting?.DoubleBetChips();
             ddSound.Play(audioSource); //mark dd sound
             yield return StartCoroutine(
                 DealCardTo(ActiveHand, ActiveViews,

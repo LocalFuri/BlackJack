@@ -133,6 +133,9 @@ namespace Blackjack
 
             chipResetButton?.onClick.AddListener(OnChipResetClicked);
             chipMaxButton?.onClick.AddListener(OnChipMaxClicked);
+
+            if (betSumLabel != null)
+                betSumLabel.gameObject.SetActive(false);
         }
 
         // ──────────────────────────────────────────────────────────────────────
@@ -615,20 +618,71 @@ namespace Blackjack
         private void RefreshBetLabel()
         {
             if (betSumLabel == null) return;
+
+            bool hasBet = TotalBet > 0;
+            betSumLabel.gameObject.SetActive(hasBet);
+
+            if (!hasBet) return;
+
             //betSumLabel.text = $"Bet: € {((decimal)TotalBet).ToString("N2", GermanCulture)}";
             //betSumLabel.text = $"Bet: € {TotalBet}"; //no separators
             betSumLabel.text = $"€ {(TotalBet).ToString("N0", GermanCulture)}"; //N2 = decimal digits
-    }
+            PositionBetLabelAboveTallestStack();
+        }
 
-        /// <summary>
-        /// Doubles the value shown in the BetSumLabel without altering the actual chip state.
-        /// Called on Double Down to reflect the doubled wager in the UI.
-        /// </summary>
-        public void DoubleBetLabel()
+        /// <summary>Moves the bet sum label so its bottom edge sits above the tallest chip pile, horizontally centered on that column.</summary>
+        private void PositionBetLabelAboveTallestStack()
         {
             if (betSumLabel == null) return;
-            //betSumLabel.text = $"Bet: € {TotalBet * 2}"; //no separators
-            betSumLabel.text = $"Bet: € {(TotalBet *2).ToString("N0", GermanCulture)}"; //N2 = decimal digits
-    }
+
+            RectTransform labelRT = betSumLabel.GetComponent<RectTransform>();
+            if (labelRT == null) return;
+
+            if (_stacks.Count == 0)
+            {
+                labelRT.anchoredPosition = Vector2.zero;
+                return;
+            }
+
+            int tallestType = -1;
+            int tallestCount = 0;
+            float leftmostX  = float.MaxValue;
+            float rightmostX = float.MinValue;
+
+            foreach (KeyValuePair<int, List<GameObject>> kvp in _stacks)
+            {
+                if (kvp.Value.Count == 0) continue;
+
+                if (kvp.Value.Count > tallestCount)
+                {
+                    tallestCount = kvp.Value.Count;
+                    tallestType  = kvp.Key;
+                }
+
+                // Use bottom chip in each column for the X position (all chips in a column share the same X)
+                RectTransform bottomChipRT = kvp.Value[0].GetComponent<RectTransform>();
+                float chipLeft  = bottomChipRT.anchoredPosition.x;
+                float chipRight = chipLeft + chipSize.x * betChipScale;
+
+                if (chipLeft  < leftmostX)  leftmostX  = chipLeft;
+                if (chipRight > rightmostX) rightmostX = chipRight;
+            }
+
+            if (tallestType < 0)
+            {
+                labelRT.anchoredPosition = Vector2.zero;
+                return;
+            }
+
+            List<GameObject> tallestStack = _stacks[tallestType];
+            GameObject topChip = tallestStack[tallestStack.Count - 1];
+            RectTransform topChipRT = topChip.GetComponent<RectTransform>();
+
+            float horizontalCenter = (leftmostX + rightmostX) * 0.5f;
+            float stackTopY = topChipRT.anchoredPosition.y + chipSize.y * betChipScale * 0.5f;
+
+            labelRT.anchoredPosition = new Vector2(horizontalCenter, stackTopY);
+        }
+
     }
 }
