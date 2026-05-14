@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using TMPro;
 
@@ -37,6 +38,9 @@ namespace Blackjack
         [SerializeField] private Button splitButton;
         [SerializeField] private Button doubleDownButton;
         [SerializeField] private Button ddTestButton;
+
+        [Header("Button Sprites")]
+        [SerializeField] private Sprite splitAvailableSprite;
 
         [Header("Menu")]
         [SerializeField] private MenuController menuController;
@@ -282,6 +286,19 @@ namespace Blackjack
             statusLabel.color = previousColor;
 
             IsLimitPulsing = false;
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────
+        // Input
+        // ──────────────────────────────────────────────────────────────────────────
+
+        private void Update()
+        {
+            if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+            {
+                if (dealButton != null && dealButton.gameObject.activeSelf)
+                    OnDeal();
+            }
         }
 
         // ──────────────────────────────────────────────────────────────────────────
@@ -696,9 +713,10 @@ namespace Blackjack
 
             if (score > BlackjackValue)
             {
-                string label = _isSplitRound ? $"Hand {_activeHandIndex + 1} busts" : "Bust";
-                SetStatus($"{label}");
-                PlayLoseSound();
+                
+              string label = _isSplitRound ? $"Hand {_activeHandIndex + 1} busts" : "Bust!";
+              SetStatus($"{label}", LoseColor);
+              PlayLoseSound();
 
                 if (_isSplitRound)
                 {
@@ -1216,15 +1234,39 @@ namespace Blackjack
 
         private void SetButtonState(bool dealEnabled, bool actionEnabled, bool splitEnabled, bool doubleDownEnabled = false)
         {
-            dealButton.interactable      = dealEnabled;
+            dealButton.interactable = dealEnabled;
             dealButton.gameObject.SetActive(dealEnabled);
-            hitButton.interactable       = actionEnabled;
-            standButton.interactable     = actionEnabled;
-            surrenderButton.interactable = actionEnabled;
+
+            hitButton.interactable = actionEnabled;
+            hitButton.gameObject.SetActive(actionEnabled);
+
+            standButton.interactable = actionEnabled;
+            standButton.gameObject.SetActive(actionEnabled);
+
+            if (surrenderButton != null)
+            {
+                surrenderButton.interactable = actionEnabled;
+                surrenderButton.gameObject.SetActive(actionEnabled);
+            }
+
             if (splitButton != null)
+            {
                 splitButton.interactable = splitEnabled;
+                splitButton.gameObject.SetActive(splitEnabled);
+
+                if (splitEnabled && splitAvailableSprite != null)
+                {
+                    Image splitImage = splitButton.GetComponent<Image>();
+                    if (splitImage != null)
+                        splitImage.sprite = splitAvailableSprite;
+                }
+            }
+
             if (doubleDownButton != null)
+            {
                 doubleDownButton.interactable = doubleDownEnabled;
+                doubleDownButton.gameObject.SetActive(doubleDownEnabled);
+            }
         }
 
         // ──────────────────────────────────────────────────────────────────────────
