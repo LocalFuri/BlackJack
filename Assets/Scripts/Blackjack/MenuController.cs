@@ -27,9 +27,12 @@ namespace Blackjack
         [SerializeField] private Toggle ddTestToggle;
         [SerializeField] private Toggle testSplitToggle;
 
-        [Header("Volume")]
+    [Header("Volume")]
         [SerializeField] private Slider volumeSlider;
         [SerializeField] private AudioMixer audioMixer;
+
+        [Header("Game Actions")]
+        [SerializeField] private BlackjackGame blackjackGame;
 
         private const string MasterVolumeParam = "MasterVolume";
 
@@ -106,6 +109,12 @@ namespace Blackjack
 
             _settings.volume = linear;
             SettingsRepository.Save(_settings);
+        }
+
+        /// <summary>Resets the game to the initial state. Called by the Reset Game button inside the menu panel.</summary>
+        public void OnResetGameClicked()
+        {
+            blackjackGame?.ResetGame();
         }
 
         // ──────────────────────────────────────────────────────────────────────────

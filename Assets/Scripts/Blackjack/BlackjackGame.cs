@@ -163,6 +163,51 @@ namespace Blackjack
         /// <summary>Closes the menu panel. Used by <see cref="ChipBetting"/> when a bet action is taken during the betting phase.</summary>
         public void CloseMenu() => menuController?.CloseMenu();
 
+        /// <summary>
+        /// Resets the game to its initial state: sets the player's money to zero,
+        /// clears all cards and the bet area, and returns to the Idle state.
+        /// </summary>
+        public void ResetGame()
+        {
+            StopAllCoroutines();
+
+            menuController?.CloseMenu();
+
+            foreach (CardView v in _playerCardViews) if (v != null) Destroy(v.gameObject);
+            _playerCardViews.Clear();
+
+            foreach (CardView v in _splitCardViews) if (v != null) Destroy(v.gameObject);
+            _splitCardViews.Clear();
+
+            foreach (CardView v in _dealerCardViews) if (v != null) Destroy(v.gameObject);
+            _dealerCardViews.Clear();
+
+            _playerHand.Clear();
+            _splitHand.Clear();
+            _dealerHand.Clear();
+            _dealerHoleCardView   = null;
+            _isSplitRound         = false;
+            _activeHandIndex      = 0;
+            _savedBetBeforeAction = 0;
+            _doubleDownExtraBet   = 0;
+
+            chipBetting?.ClearBetArea();
+
+            _playerMoney = 0;
+            RefreshMoneyLabel();
+
+            StopAllScorePulses();
+            ResetPlayerScoreLabelPosition();
+            SetScoreLabelsVisible(false);
+            SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
+            SetStatus("Place your bet");
+
+            _state = GameState.Idle;
+
+            if (resetSound.HasClip && audioSource != null)
+                resetSound.Play(audioSource);
+        }
+
         /// <summary>Returns true when the menu is open and a round is already in progress — input should be suppressed.</summary>
         private bool IsMenuBlocking => menuController != null && menuController.IsMenuOpen
             && (_state == GameState.PlayerTurn || _state == GameState.DealerTurn);
