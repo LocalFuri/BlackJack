@@ -322,16 +322,9 @@ namespace Blackjack
         {
             if (_doubleBJSoundPlaying) return;
             menuController?.CloseMenu();
-
-            // Restore chips to pre-split/double-down state before the new round begins.
-            if (_savedBetBeforeAction > 0 && chipBetting != null)
-            {
-                chipBetting.RestoreBet(_savedBetBeforeAction);
-                _savedBetBeforeAction = 0;
-            }
-
             EnsureMinimumBet();
             _savedBetBeforeAction = 0;
+            chipBetting?.SnapshotBet();
             _playerMoney -= CurrentBet;
             RefreshMoneyLabel();
             _state = GameState.PlayerTurn;
@@ -373,6 +366,7 @@ namespace Blackjack
         {
             if (IsMenuBlocking) return;
             if (_state != GameState.PlayerTurn) return;
+            if (ActiveHand.Cards.Count != 2) return;
             ConfirmOrExecute(PlayerAction.Surrender, () => StartCoroutine(PlayerSurrender()));
         }
 
@@ -539,7 +533,7 @@ namespace Blackjack
             }
 
             // ── Player turn ──
-            SetButtonState(dealEnabled: false, actionEnabled: true, splitEnabled: CanSplit(), doubleDownEnabled: CanDoubleDown());
+            SetButtonState(dealEnabled: false, actionEnabled: true, splitEnabled: CanSplit(), doubleDownEnabled: CanDoubleDown(), surrenderEnabled: true);
             SetStatus($"Your turn");
 
             _dealerUpcardSnapshot = _dealerHand.Cards[0];
@@ -923,6 +917,7 @@ namespace Blackjack
             yield return new WaitForSeconds(endRoundDelay);
             chipBetting?.ResetMaxBet();
             chipBetting?.ClampBetToMaxBet();
+            chipBetting?.RestoreBetFromSnapshot();
             if (!_doubleBJSoundPlaying)
                 SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
             // State stays RoundOver — chip click or Deal press drives the next transition.
@@ -1239,7 +1234,7 @@ namespace Blackjack
             SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
         }
 
-        private void SetButtonState(bool dealEnabled, bool actionEnabled, bool splitEnabled, bool doubleDownEnabled = false)
+        private void SetButtonState(bool dealEnabled, bool actionEnabled, bool splitEnabled, bool doubleDownEnabled = false, bool surrenderEnabled = false)
         {
             dealButton.interactable = dealEnabled;
             dealButton.gameObject.SetActive(dealEnabled);
@@ -1252,8 +1247,8 @@ namespace Blackjack
 
             if (surrenderButton != null)
             {
-                surrenderButton.interactable = actionEnabled;
-                surrenderButton.gameObject.SetActive(actionEnabled);
+                surrenderButton.interactable = surrenderEnabled;
+                surrenderButton.gameObject.SetActive(surrenderEnabled);
             }
 
             if (splitButton != null)

@@ -285,6 +285,50 @@ namespace Blackjack
             RefreshBetLabel();
         }
 
+        // Saved chip composition from the most recent SnapshotBet call.
+        private List<int> _snapshotColumnOrder = new();
+        private Dictionary<int, int> _snapshotChipCounts = new();
+
+        /// <summary>
+        /// Captures the current chip composition so it can be restored after the round ends.
+        /// Call this just before deducting the bet from the player's money.
+        /// </summary>
+        public void SnapshotBet()
+        {
+            _snapshotColumnOrder = new List<int>(_columnOrder);
+            _snapshotChipCounts  = new Dictionary<int, int>(_chipCounts);
+        }
+
+        /// <summary>
+        /// Rebuilds the bet area to exactly match the composition captured by the last
+        /// <see cref="SnapshotBet"/> call. Clears current chips without firing
+        /// <see cref="OnBetChanged"/>, places the snapshotted chips, and refreshes the label.
+        /// Does nothing when no snapshot exists or it was empty.
+        /// </summary>
+        public void RestoreBetFromSnapshot()
+        {
+            if (_snapshotColumnOrder.Count == 0) return;
+
+            // Clear existing chips silently (no event)
+            foreach (KeyValuePair<int, List<GameObject>> kvp in _stacks)
+                foreach (GameObject go in kvp.Value)
+                    if (go != null) Destroy(go);
+
+            _stacks.Clear();
+            _columnOrder.Clear();
+            _chipCounts.Clear();
+
+            // Re-place chips in the original column order to preserve visual layout.
+            foreach (int typeIndex in _snapshotColumnOrder)
+            {
+                if (!_snapshotChipCounts.TryGetValue(typeIndex, out int count)) continue;
+                for (int i = 0; i < count; i++)
+                    PlaceChip(typeIndex);
+            }
+
+            RefreshBetLabel();
+        }
+
         /// <summary>
         /// Duplicates every chip currently in the bet area, doubling the visual stack and
         /// <see cref="TotalBet"/>. Fires <see cref="OnBetChanged"/> with the added amount
