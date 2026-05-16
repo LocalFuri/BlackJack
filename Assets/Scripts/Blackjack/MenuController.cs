@@ -26,6 +26,7 @@ namespace Blackjack
         [SerializeField] private Toggle bjAllToggle;
         [SerializeField] private Toggle ddTestToggle;
         [SerializeField] private Toggle testSplitToggle;
+        [SerializeField] private Toggle overrideStrategyToggle;
 
     [Header("Volume")]
         [SerializeField] private Slider volumeSlider;
@@ -53,6 +54,7 @@ namespace Blackjack
             bjAllToggle?.onValueChanged.AddListener(OnBjAllToggled);
             ddTestToggle?.onValueChanged.AddListener(OnDdTestToggled);
             testSplitToggle?.onValueChanged.AddListener(OnTestSplitToggled);
+            overrideStrategyToggle?.onValueChanged.AddListener(OnOverrideStrategyToggled);
             volumeSlider?.onValueChanged.AddListener(OnVolumeChanged);
 
             menuPanel?.SetActive(false);
@@ -102,6 +104,12 @@ namespace Blackjack
             SettingsRepository.Save(_settings);
         }
 
+        private void OnOverrideStrategyToggled(bool value)
+        {
+            _settings.overrideStrategyEnabled = value;
+            SettingsRepository.Save(_settings);
+        }
+
         private void OnVolumeChanged(float linear)
         {
             if (audioMixer != null)
@@ -123,6 +131,9 @@ namespace Blackjack
 
         /// <summary>True while the menu panel is visible.</summary>
         public bool IsMenuOpen => menuPanel != null && menuPanel.activeSelf;
+
+        /// <summary>When true, strategy deviation popup is bypassed and the player's action executes immediately.</summary>
+        public bool IsStrategyOverrideEnabled => _settings.overrideStrategyEnabled;
 
         /// <summary>Shows or hides the menu panel.</summary>
         private void ToggleMenu()
@@ -156,6 +167,9 @@ namespace Blackjack
             if (testSplitToggle != null)
                 testSplitToggle.SetIsOnWithoutNotify(_settings.testSplitEnabled);
             testSplitButton?.SetActive(_settings.testSplitEnabled);
+
+            if (overrideStrategyToggle != null)
+                overrideStrategyToggle.SetIsOnWithoutNotify(_settings.overrideStrategyEnabled);
 
             if (volumeSlider != null)
                 volumeSlider.SetValueWithoutNotify(_settings.volume);

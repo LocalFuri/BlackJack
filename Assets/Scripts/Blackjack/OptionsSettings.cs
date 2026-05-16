@@ -9,10 +9,11 @@ namespace Blackjack
     [Serializable]
     public class OptionsSettings
     {
-        public bool blackjackTestEnabled = true;
-        public bool bjAllEnabled         = true;
-        public bool ddTestEnabled        = true;
-        public bool testSplitEnabled     = true;
-        public float volume              = 1f;
+        public bool blackjackTestEnabled    = true;
+        public bool bjAllEnabled            = true;
+        public bool ddTestEnabled           = true;
+        public bool testSplitEnabled        = true;
+        public bool overrideStrategyEnabled = false;
+        public float volume                 = 1f;
     }
 }

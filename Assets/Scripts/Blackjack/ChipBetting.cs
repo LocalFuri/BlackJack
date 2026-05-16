@@ -160,6 +160,9 @@ namespace Blackjack
         /// <summary>Maximum total bet the player is allowed to place.</summary>
         public int MaxBet => maxBet;
 
+        /// <summary>The monetary value of the lowest-denomination chip type. Returns 1 when no chip types are configured.</summary>
+        public int SmallestChipValue => chipTypes.Count > 0 ? chipTypes[0].value : 1;
+
         /// <summary>Resets the maximum bet back to the default value of <see cref="DefaultMaxBet"/>.</summary>
         public void ResetMaxBet() => maxBet = DefaultMaxBet;
 
@@ -246,6 +249,20 @@ namespace Blackjack
                 OnBetChanged?.Invoke(delta);
 
             RefreshBetLabel();
+        }
+
+        /// <summary>
+        /// Rebuilds the bet area to represent exactly <paramref name="targetAmount"/> and fires
+        /// <see cref="OnBetChanged"/> with the signed delta so all listeners (money label, status)
+        /// stay in sync. Use this for programmatic bet changes during the betting phase.
+        /// </summary>
+        public void SetBet(int targetAmount)
+        {
+            int previousBet = TotalBet;
+            RestoreBet(targetAmount);
+            int delta = TotalBet - previousBet;
+            if (delta != 0)
+                OnBetChanged?.Invoke(delta);
         }
 
         /// <summary>
