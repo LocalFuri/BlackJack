@@ -14,6 +14,7 @@ namespace Blackjack
         public bool ddTestEnabled           = true;
         public bool testSplitEnabled        = true;
         public bool overrideStrategyEnabled = false;
+        public bool alwaysLoseEnabled       = false;
         public float volume                 = 1f;
     }
 }

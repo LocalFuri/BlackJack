@@ -27,6 +27,7 @@ namespace Blackjack
         [SerializeField] private Toggle ddTestToggle;
         [SerializeField] private Toggle testSplitToggle;
         [SerializeField] private Toggle overrideStrategyToggle;
+        [SerializeField] private Toggle alwaysLoseToggle;
 
     [Header("Volume")]
         [SerializeField] private Slider volumeSlider;
@@ -55,6 +56,7 @@ namespace Blackjack
             ddTestToggle?.onValueChanged.AddListener(OnDdTestToggled);
             testSplitToggle?.onValueChanged.AddListener(OnTestSplitToggled);
             overrideStrategyToggle?.onValueChanged.AddListener(OnOverrideStrategyToggled);
+            alwaysLoseToggle?.onValueChanged.AddListener(OnAlwaysLoseToggled);
             volumeSlider?.onValueChanged.AddListener(OnVolumeChanged);
 
             menuPanel?.SetActive(false);
@@ -64,12 +66,21 @@ namespace Blackjack
         {
             // Ensure the panel is hidden even if Awake order caused it to show briefly.
             menuPanel?.SetActive(false);
+
+            if (blackjackGame != null)
+                blackjackGame.OnAlwaysLoseDisabled += DisableAlwaysLose;
         }
 
         private void Update()
         {
             if (Keyboard.current != null && Keyboard.current.f2Key.wasPressedThisFrame)
                 ToggleMenu();
+        }
+
+        private void OnDestroy()
+        {
+            if (blackjackGame != null)
+                blackjackGame.OnAlwaysLoseDisabled -= DisableAlwaysLose;
         }
 
         // ──────────────────────────────────────────────────────────────────────────
@@ -108,6 +119,23 @@ namespace Blackjack
         {
             _settings.overrideStrategyEnabled = value;
             SettingsRepository.Save(_settings);
+        }
+
+        /// <summary>Forces the player to lose every round when enabled. Used for Martingale testing.</summary>
+        private void OnAlwaysLoseToggled(bool value)
+        {
+            if (blackjackGame != null)
+                blackjackGame.AlwaysLose = value;
+            _settings.alwaysLoseEnabled = value;
+            SettingsRepository.Save(_settings);
+        }
+
+        /// <summary>Called by BlackjackGame when it automatically turns off Always Lose upon entering Martingale mode.</summary>
+        private void DisableAlwaysLose()
+        {
+            _settings.alwaysLoseEnabled = false;
+            SettingsRepository.Save(_settings);
+            alwaysLoseToggle?.SetIsOnWithoutNotify(false);
         }
 
         private void OnVolumeChanged(float linear)
@@ -170,6 +198,11 @@ namespace Blackjack
 
             if (overrideStrategyToggle != null)
                 overrideStrategyToggle.SetIsOnWithoutNotify(_settings.overrideStrategyEnabled);
+
+            if (alwaysLoseToggle != null)
+                alwaysLoseToggle.SetIsOnWithoutNotify(_settings.alwaysLoseEnabled);
+            if (blackjackGame != null)
+                blackjackGame.AlwaysLose = _settings.alwaysLoseEnabled;
 
             if (volumeSlider != null)
                 volumeSlider.SetValueWithoutNotify(_settings.volume);
