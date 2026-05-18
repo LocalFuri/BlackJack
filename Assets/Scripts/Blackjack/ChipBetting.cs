@@ -256,13 +256,22 @@ namespace Blackjack
         /// <see cref="OnBetChanged"/> with the signed delta so all listeners (money label, status)
         /// stay in sync. Use this for programmatic bet changes during the betting phase.
         /// </summary>
-        public void SetBet(int targetAmount)
+        /// <summary>
+        /// Rebuilds the bet area to represent exactly <paramref name="targetAmount"/> and fires
+        /// <see cref="OnBetChanged"/> with the signed delta so all listeners stay in sync.
+        /// </summary>
+        /// <param name="targetAmount">The desired total bet value.</param>
+        /// <param name="playSound">When true, plays <see cref="chipSound"/> if the bet increased (e.g. for Martingale auto-raise).</param>
+        public void SetBet(int targetAmount, bool playSound = false)
         {
             int previousBet = TotalBet;
             RestoreBet(targetAmount);
             int delta = TotalBet - previousBet;
             if (delta != 0)
                 OnBetChanged?.Invoke(delta);
+
+            if (playSound && delta > 0)
+                chipSound.Play(audioSource);
         }
 
         /// <summary>
@@ -351,7 +360,8 @@ namespace Blackjack
         /// <see cref="TotalBet"/>. Fires <see cref="OnBetChanged"/> with the added amount
         /// and refreshes the bet sum label.
         /// </summary>
-        public void DoubleBetChips()
+        /// <param name="playSound">When true, plays <see cref="chipSound"/> after doubling (e.g. for Martingale auto-raise).</param>
+        public void DoubleBetChips(bool playSound = false)
         {
             if (_columnOrder.Count == 0) return;
 
@@ -374,6 +384,9 @@ namespace Blackjack
 
             if (addedValue != 0)
                 OnBetChanged?.Invoke(addedValue);
+
+            if (playSound)
+                chipSound.Play(audioSource);
 
             RefreshBetLabel();
         }

@@ -64,7 +64,12 @@ namespace Blackjack
         [Header("Martingale")]
         [SerializeField] private MartingalePopup martingalePopup;
 
-        [Header("Audio")] //mark audio
+    [Header("Fireworks")]
+    [SerializeField] private GameObject fireworksPrefab;
+    [SerializeField] private float fireworksDuration = 4f;
+
+
+    [Header("Audio")] //mark audio
         [SerializeField] private AudioSource audioSource;
 
     [SerializeField] private SoundEntry cardSlideSound;
@@ -289,7 +294,7 @@ namespace Blackjack
             if (_pendingMartingaleDouble && chipBetting != null)
             {
                 _pendingMartingaleDouble = false;
-                chipBetting.DoubleBetChips();
+                chipBetting.DoubleBetChips(playSound: true);
             }
 
      
@@ -434,7 +439,7 @@ namespace Blackjack
                             if (CurrentBet <= minimum)
                             {
                                 // Player is on minimum bet — jump straight to 5× minimum.
-                                chipBetting.SetBet(minimum * 5);
+                                chipBetting.SetBet(minimum * 5, playSound: true);
                                 _martingaleChipValue = minimum * 5;
                             }
                             else
@@ -670,7 +675,7 @@ namespace Blackjack
                 UpdateScoreLabels(revealDealer: true);
 
                 if (playerBJ && dealerBJ)  { StartCoroutine(PlayDoubleBJSoundRoutine()); RecordRoundOutcome(false, scoreDelta:  0, isPush: true); SetStatus("Push", PushColor); ApplyPayout(PayoutResult.Push, CurrentBet); }
-                else if (playerBJ)         { ApplyBlackjackGlow(); PlayNaturalBlackjackSound(); RecordRoundOutcome(false, scoreDelta: +1); SetStatus("You win", WinColor); ApplyPayout(PayoutResult.BlackjackWin, CurrentBet); }
+                else if (playerBJ)         { ApplyBlackjackGlow(); PlayNaturalBlackjackSound(); SpawnFireworks(); RecordRoundOutcome(false, scoreDelta: +1); SetStatus("You win", WinColor); ApplyPayout(PayoutResult.BlackjackWin, CurrentBet); }
                 else                       { PlayLoseSound(); RecordRoundOutcome(true, lostAmount: CurrentBet, scoreDelta: -1); SetStatus("You lose", LoseColor); ApplyPayout(PayoutResult.Lose, CurrentBet); }
 
                 yield return StartCoroutine(EndRound());
@@ -1158,12 +1163,6 @@ namespace Blackjack
             chipBetting?.ResetMaxBet();
             chipBetting?.ClampBetToMaxBet();
             chipBetting?.RestoreBetFromSnapshot();
-            if (_martingaleWin)
-            {
-                chipBetting?.ResetToMinimumBet();
-                chipBetting?.SnapshotBet();
-                _martingaleWin = false;
-            }
             if (!_doubleBJSoundPlaying && _state == GameState.RoundOver)
                 SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
             // State stays RoundOver — chip click or Deal press drives the next transition.
@@ -1431,14 +1430,17 @@ namespace Blackjack
         /// <summary>
         /// Plays the win audio and card glow.
         /// When the current round was entered as a Delayed Martingale, triggers the full
-        /// natural-blackjack celebration instead of the regular win sound.
+        /// natural-blackjack celebration instead of the regular win sound, then plays
+        /// <see cref="resetSound"/> once the celebration has finished.
         /// </summary>
         private void PlayWinRoutine()
         {
             if (_martingalePopupShown)
             {
                 ApplyBlackjackGlow();
-                PlayNaturalBlackjackSound();
+                float celebrationDuration = PlayNaturalBlackjackSound();
+                SpawnFireworks();
+                StartCoroutine(PlayResetSoundAfterDelay(celebrationDuration));
             }
             else
             {
@@ -1446,9 +1448,41 @@ namespace Blackjack
             }
         }
 
+        /// <summary>Waits for <paramref name="delay"/> seconds, then plays <see cref="resetSound"/>.
+        /// If the round was a Martingale win, also replaces the bet area chips with the minimum bet.</summary>
+        private IEnumerator PlayResetSoundAfterDelay(float delay)
+        {
+            // Always yield at least one frame so RecordRoundOutcome can set _martingaleWin before we read it.
+            if (delay > 0f)
+                yield return new WaitForSeconds(delay);
+            else
+                yield return null;
+
+            resetSound.Play(audioSource);
+
+            if (_martingaleWin && chipBetting != null)
+            {
+                chipBetting.ResetToMinimumBet();
+                chipBetting.SnapshotBet();
+                _martingaleWin = false;
+            }
+        }
+
+        /// <summary>
+        /// Instantiates <see cref="fireworksPrefab"/> at the world origin and auto-destroys it
+        /// after <see cref="fireworksDuration"/> seconds.
+        /// </summary>
+        private void SpawnFireworks()
+        {
+            if (fireworksPrefab == null) return;
+            GameObject fx = Instantiate(fireworksPrefab, Vector3.zero, Quaternion.identity);
+            Destroy(fx, fireworksDuration);
+        }
+
         /// <summary>Plays the natural blackjack sound if assigned, otherwise falls back to win sound.
-        /// Also plays the yuhu sound simultaneously. Stops all player card glow pulses once the longest clip finishes.</summary>
-        private void PlayNaturalBlackjackSound()
+        /// Also plays the yuhu sound simultaneously. Stops all player card glow pulses once the longest clip finishes.
+        /// Returns the duration of the longest clip played, so callers can chain additional sounds.</summary>
+        private float PlayNaturalBlackjackSound()
         {
             SoundEntry primary = naturalBlackjackSound.HasClip ? naturalBlackjackSound : winSound;
             float longestDuration = 0f;
@@ -1468,6 +1502,8 @@ namespace Blackjack
 
             if (longestDuration > 0f)
                 StartCoroutine(StopGlowAfterClip(longestDuration));
+
+            return longestDuration;
         }
 
         private IEnumerator StopGlowAfterClip(float duration)
