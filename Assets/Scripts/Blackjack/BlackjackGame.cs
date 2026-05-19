@@ -675,7 +675,7 @@ namespace Blackjack
                 UpdateScoreLabels(revealDealer: true);
 
                 if (playerBJ && dealerBJ)  { StartCoroutine(PlayDoubleBJSoundRoutine()); RecordRoundOutcome(false, scoreDelta:  0, isPush: true); SetStatus("Push", PushColor); ApplyPayout(PayoutResult.Push, CurrentBet); }
-                else if (playerBJ)         { ApplyBlackjackGlow(); PlayNaturalBlackjackSound(); SpawnFireworks(); RecordRoundOutcome(false, scoreDelta: +1); SetStatus("You win", WinColor); ApplyPayout(PayoutResult.BlackjackWin, CurrentBet); }
+                else if (playerBJ)         { ApplyBlackjackGlow(); SpawnFireworks(PlayNaturalBlackjackSound()); RecordRoundOutcome(false, scoreDelta: +1); SetStatus("You win", WinColor); ApplyPayout(PayoutResult.BlackjackWin, CurrentBet); }
                 else                       { PlayLoseSound(); RecordRoundOutcome(true, lostAmount: CurrentBet, scoreDelta: -1); SetStatus("You lose", LoseColor); ApplyPayout(PayoutResult.Lose, CurrentBet); }
 
                 yield return StartCoroutine(EndRound());
@@ -1439,7 +1439,7 @@ namespace Blackjack
             {
                 ApplyBlackjackGlow();
                 float celebrationDuration = PlayNaturalBlackjackSound();
-                SpawnFireworks();
+                SpawnFireworks(celebrationDuration);
                 StartCoroutine(PlayResetSoundAfterDelay(celebrationDuration));
             }
             else
@@ -1472,11 +1472,26 @@ namespace Blackjack
         /// Instantiates <see cref="fireworksPrefab"/> at the world origin and auto-destroys it
         /// after <see cref="fireworksDuration"/> seconds.
         /// </summary>
-        private void SpawnFireworks()
+        private void SpawnFireworks(float duration)
         {
             if (fireworksPrefab == null) return;
-            GameObject fx = Instantiate(fireworksPrefab, Vector3.zero, Quaternion.identity);
-            Destroy(fx, fireworksDuration);
+            Vector3 spawnPosition = Vector3.zero;
+            if (playerCardArea is RectTransform cardRect)
+            {
+                Vector3[] corners = new Vector3[4];
+                cardRect.GetWorldCorners(corners);
+                // corners: 0=bottom-left, 1=top-left, 2=top-right, 3=bottom-right
+                // Cards are left-aligned in the area, so bias toward the left side
+                float x = Mathf.Lerp(corners[0].x, corners[2].x, 0.2f);
+                float y = (corners[0].y + corners[2].y) * 0.5f;
+                spawnPosition = new Vector3(x, y, corners[0].z);
+            }
+            else if (playerCardArea != null)
+            {
+                spawnPosition = playerCardArea.position;
+            }
+            GameObject fx = Instantiate(fireworksPrefab, spawnPosition, Quaternion.identity);
+            Destroy(fx, duration > 0f ? duration : fireworksDuration);
         }
 
         /// <summary>Plays the natural blackjack sound if assigned, otherwise falls back to win sound.
