@@ -165,6 +165,13 @@ namespace Blackjack
 
         private const int DelayedMartingaleThreshold = 4;
 
+        // Returns the effective Martingale trigger threshold:
+        // uses the menu slider when the toggle is on, otherwise falls back to the hardcoded constant.
+        private int EffectiveMartingaleThreshold =>
+            menuController != null && menuController.MartingaleThreshold >= 0
+                ? menuController.MartingaleThreshold
+                : DelayedMartingaleThreshold;
+
     private TextMeshProUGUI _splitScoreLabel;
         private Vector2 _defaultPlayerScorePosition;
         private ScoreLabelPulse _playerScorePulse;
@@ -414,8 +421,8 @@ namespace Blackjack
             if (_state != GameState.Idle && _state != GameState.RoundOver) return;
             StopBlackjackCelebration();
 
-            // Show Martingale suggestion popup only after the player has lost exactly DelayedMartingaleThreshold consecutive rounds.
-            bool consecutiveTrigger = _consecutiveLosses >= DelayedMartingaleThreshold;
+            // Show Martingale suggestion popup only after the player has lost exactly the threshold consecutive rounds.
+            bool consecutiveTrigger = _consecutiveLosses >= EffectiveMartingaleThreshold;
 
             if (martingalePopup != null
                 && consecutiveTrigger

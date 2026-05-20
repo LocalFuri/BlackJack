@@ -28,10 +28,14 @@ namespace Blackjack
         [SerializeField] private Toggle testSplitToggle;
         [SerializeField] private Toggle overrideStrategyToggle;
         [SerializeField] private Toggle alwaysLoseToggle;
+        [SerializeField] private Toggle martingaleThresholdToggle;
 
-    [Header("Volume")]
+        [Header("Volume")]
         [SerializeField] private Slider volumeSlider;
         [SerializeField] private AudioMixer audioMixer;
+
+        [Header("Martingale Threshold")]
+        [SerializeField] private Slider martingaleThresholdSlider;
 
         [Header("Game Actions")]
         [SerializeField] private BlackjackGame blackjackGame;
@@ -58,6 +62,8 @@ namespace Blackjack
             overrideStrategyToggle?.onValueChanged.AddListener(OnOverrideStrategyToggled);
             alwaysLoseToggle?.onValueChanged.AddListener(OnAlwaysLoseToggled);
             volumeSlider?.onValueChanged.AddListener(OnVolumeChanged);
+            martingaleThresholdToggle?.onValueChanged.AddListener(OnMartingaleThresholdToggled);
+            martingaleThresholdSlider?.onValueChanged.AddListener(OnMartingaleThresholdChanged);
 
             menuPanel?.SetActive(false);
         }
@@ -147,6 +153,18 @@ namespace Blackjack
             SettingsRepository.Save(_settings);
         }
 
+        private void OnMartingaleThresholdToggled(bool value)
+        {
+            _settings.martingaleThresholdEnabled = value;
+            SettingsRepository.Save(_settings);
+        }
+
+        private void OnMartingaleThresholdChanged(float value)
+        {
+            _settings.martingaleThreshold = Mathf.RoundToInt(value);
+            SettingsRepository.Save(_settings);
+        }
+
         /// <summary>Resets the game to the initial state. Called by the Reset Game button inside the menu panel.</summary>
         public void OnResetGameClicked()
         {
@@ -162,6 +180,13 @@ namespace Blackjack
 
         /// <summary>When true, strategy deviation popup is bypassed and the player's action executes immediately.</summary>
         public bool IsStrategyOverrideEnabled => _settings.overrideStrategyEnabled;
+
+        /// <summary>
+        /// Returns the Martingale streak threshold from the menu slider when the toggle is on,
+        /// or -1 when the feature is disabled (so the popup never triggers via this path).
+        /// </summary>
+        public int MartingaleThreshold =>
+            _settings.martingaleThresholdEnabled ? _settings.martingaleThreshold : -1;
 
         /// <summary>Shows or hides the menu panel.</summary>
         private void ToggleMenu()
@@ -209,6 +234,12 @@ namespace Blackjack
 
             if (audioMixer != null)
                 audioMixer.SetFloat(MasterVolumeParam, LinearToDb(_settings.volume));
+
+            if (martingaleThresholdToggle != null)
+                martingaleThresholdToggle.SetIsOnWithoutNotify(_settings.martingaleThresholdEnabled);
+
+            if (martingaleThresholdSlider != null)
+                martingaleThresholdSlider.SetValueWithoutNotify(_settings.martingaleThreshold);
         }
 
         // Converts a linear [0,1] slider value to decibels for the AudioMixer.
