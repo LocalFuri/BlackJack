@@ -37,6 +37,9 @@ namespace Blackjack
         [Header("Martingale Threshold")]
         [SerializeField] private Slider martingaleThresholdSlider;
 
+        [Header("Test Split Rank")]
+        [SerializeField] private Slider testSplitRankSlider;
+
         [Header("Game Actions")]
         [SerializeField] private BlackjackGame blackjackGame;
 
@@ -64,6 +67,7 @@ namespace Blackjack
             volumeSlider?.onValueChanged.AddListener(OnVolumeChanged);
             martingaleThresholdToggle?.onValueChanged.AddListener(OnMartingaleThresholdToggled);
             martingaleThresholdSlider?.onValueChanged.AddListener(OnMartingaleThresholdChanged);
+            testSplitRankSlider?.onValueChanged.AddListener(OnTestSplitRankChanged);
 
             menuPanel?.SetActive(false);
         }
@@ -165,6 +169,15 @@ namespace Blackjack
             SettingsRepository.Save(_settings);
         }
 
+        /// <summary>Persists the selected test-split rank (2–14, matching the Rank enum).</summary>
+        public void OnTestSplitRankChanged(float value)
+        {
+            if (_settings == null) return;
+
+            _settings.testSplitRank = Mathf.RoundToInt(value);
+            SettingsRepository.Save(_settings);
+        }
+
         /// <summary>Resets the game to the initial state. Called by the Reset Game button inside the menu panel.</summary>
         public void OnResetGameClicked()
         {
@@ -187,6 +200,9 @@ namespace Blackjack
         /// </summary>
         public int MartingaleThreshold =>
             _settings.martingaleThresholdEnabled ? _settings.martingaleThreshold : -1;
+
+        /// <summary>Returns the Rank integer (2–14) selected by the test-split slider.</summary>
+        public int TestSplitRank => _settings.testSplitRank;
 
         /// <summary>Shows or hides the menu panel.</summary>
         private void ToggleMenu()
@@ -240,6 +256,9 @@ namespace Blackjack
 
             if (martingaleThresholdSlider != null)
                 martingaleThresholdSlider.SetValueWithoutNotify(_settings.martingaleThreshold);
+
+            if (testSplitRankSlider != null)
+                testSplitRankSlider.SetValueWithoutNotify(_settings.testSplitRank);
         }
 
         // Converts a linear [0,1] slider value to decibels for the AudioMixer.

@@ -442,19 +442,10 @@ namespace Blackjack
 
                         if (chipBetting != null)
                         {
-                            int minimum = chipBetting.SmallestChipValue;
-                            if (CurrentBet <= minimum)
-                            {
-                                // Player is on minimum bet — jump straight to 5× minimum.
-                                chipBetting.SetBet(minimum * 5, playSound: true);
-                                _martingaleChipValue = minimum * 5;
-                            }
-                            else
-                            {
-                                // Player already has a custom bet — add one minimum chip on top.
-                                chipBetting.PlaceSmallestChip();
-                                _martingaleChipValue = minimum;
-                            }
+                            // Double the bet the player placed in the previous round.
+                            int doubledBet = _lastRoundBet * 2;
+                            chipBetting.SetBet(doubledBet, playSound: true);
+                            _martingaleChipValue = doubledBet;
                         }
                         RefreshStreakLabel();
                         StartNewRound();
@@ -612,7 +603,7 @@ namespace Blackjack
             StartNewRound();
         }
 
-        /// <summary>Forces the next deal to give the player two 5s, enabling the split button.</summary>
+        /// <summary>Forces the next deal to give the player a matching pair of the rank chosen in the options slider.</summary>
         public void OnSplitTest()
         {
             if (_state != GameState.Idle && _state != GameState.RoundOver) return;
@@ -655,7 +646,14 @@ namespace Blackjack
 
             if (_forceBothBlackjack)   { _deck.ForceBothBlackjack();   _forceBothBlackjack   = false; }
             if (_forcePlayerBlackjack) { _deck.ForcePlayerBlackjack(); _forcePlayerBlackjack = false; }
-            if (_forceSplitHand)       { _deck.ForceSplitHand();       _forceSplitHand       = false; }
+            if (_forceSplitHand)
+            {
+                Rank selectedRank = (menuController != null)
+                    ? (Rank)menuController.TestSplitRank
+                    : Rank.Five;
+                _deck.ForceSplitHandWithRank(selectedRank);
+                _forceSplitHand = false;
+            }
             if (_forceDoubleDownTest)  { _deck.ForceDoubleDownTest();  _forceDoubleDownTest  = false; }
 
             ClearTable();
@@ -1021,11 +1019,19 @@ namespace Blackjack
         /// <paramref name="lostAmount"/> is the monetary amount forfeited this round (full bet for a loss, half for surrender, 0 for win/push).
         /// <paramref name="scoreDelta"/> is +1 for a win, -1 for a loss, 0 for push or surrender.
         /// <paramref name="isPush"/> when true, counts as half a loss toward the Martingale threshold without resetting streak or Martingale state.
+        /// <paramref name="isMartingaleNeutral"/> when true, leaves all Martingale and streak state completely unchanged (used for split rounds with no net score change).
         /// </summary>
-        private void RecordRoundOutcome(bool isLoss, decimal lostAmount = 0, int scoreDelta = 0, bool isPush = false)
+        private void RecordRoundOutcome(bool isLoss, decimal lostAmount = 0, int scoreDelta = 0, bool isPush = false, bool isMartingaleNeutral = false)
         {
             _lastRoundBet  = CurrentBet + _doubleDownExtraBet;
             _playerScore  += scoreDelta;
+
+            // Split rounds where the player's score is unchanged leave the Martingale counter exactly as-is.
+            if (isMartingaleNeutral)
+            {
+                RefreshStreakLabel();
+                return;
+            }
 
             // When AlwaysLose is active every round counts as a loss for Martingale tracking,
             // regardless of the actual card outcome.
@@ -1104,6 +1110,7 @@ namespace Blackjack
                 var    results = new List<string>();
                 bool   anyWin  = false;
                 bool   anyLoss = false;
+                bool   anyPush = false;
                 int    splitLostAmount = 0;
 
                 Hand[]   hands  = { _playerHand, _splitHand };
@@ -1137,6 +1144,7 @@ namespace Blackjack
                     else
                     {
                         results.Add(ColorizeText($"{labels[i]}: Push", PushColor));
+                        anyPush = true;
                         ApplyPayout(PayoutResult.Push, handBet);
                     }
                 }
@@ -1145,8 +1153,15 @@ namespace Blackjack
                 else if (anyLoss) PlayLoseSound();
                 else              PlayTieSound();
 
+                // Split 1W/1L or 1W/1Push counts as a push for the Martingale counter — streak is neither incremented nor reset.
+                bool splitPush = (anyWin && anyLoss) || (anyWin && anyPush && !anyLoss);
+                int  splitScoreDelta = anyWin && !anyLoss ? +1 : anyLoss && !anyWin ? -1 : 0;
+                // If the split produced no net score change, leave the Martingale counter completely untouched.
+                bool splitNeutral = splitScoreDelta == 0;
                 RecordRoundOutcome(isLoss: anyLoss && !anyWin, lostAmount: splitLostAmount,
-                    scoreDelta: anyWin ? +1 : anyLoss ? -1 : 0, isPush: !anyWin && !anyLoss);
+                    scoreDelta: splitScoreDelta,
+                    isPush: !anyWin && !anyLoss || splitPush,
+                    isMartingaleNeutral: splitNeutral);
                 SetStatus(string.Join("  |  ", results));
             }
             else
@@ -1321,7 +1336,6 @@ namespace Blackjack
         /// <summary>Sets the status label text and resets its color to the default.</summary>
         private void SetStatus(string message)
         {
-            statusLabel.horizontalAlignment = TMPro.HorizontalAlignmentOptions.Left;
             statusLabel.text = message;
             statusLabel.color = _defaultStatusColor;
         }
@@ -1329,7 +1343,6 @@ namespace Blackjack
         /// <summary>Sets the status label text with a specific color.</summary>
         private void SetStatus(string message, Color color)
         {
-            statusLabel.horizontalAlignment = TMPro.HorizontalAlignmentOptions.Left;
             statusLabel.text = message;
             statusLabel.color = color;
         }
