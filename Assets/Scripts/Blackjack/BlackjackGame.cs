@@ -45,6 +45,9 @@ namespace Blackjack
         [Header("Menu")]
         [SerializeField] private MenuController menuController;
 
+        [Header("Strategy Table")]
+        [SerializeField] private Blackjack.UI.StrategyTableUI strategyTableUI;
+
         [Header("Score Labels")]
         [SerializeField] private TextMeshProUGUI playerScoreLabel;
         [SerializeField] private TextMeshProUGUI dealerScoreLabel;
@@ -140,6 +143,7 @@ namespace Blackjack
 
         private int _doubleDownExtraBet; // extra bet deducted when doubling down
         private int _savedBetBeforeAction; // bet amount before split/double-down, restored next round
+        private int _betBeforeMartingale;  // bet the player had before entering Martingale mode, restored on win
 
         // Snapshot of the dealer's visible upcard taken at the start of the player's turn.
         private CardData _dealerUpcardSnapshot;
@@ -165,10 +169,9 @@ namespace Blackjack
 
         private const int DelayedMartingaleThreshold = 4;
 
-        // Returns the effective Martingale trigger threshold:
-        // uses the menu slider when the toggle is on, otherwise falls back to the hardcoded constant.
+        // Returns the effective Martingale trigger threshold from the menu slider, falling back to the hardcoded constant.
         private int EffectiveMartingaleThreshold =>
-            menuController != null && menuController.MartingaleThreshold >= 0
+            menuController != null
                 ? menuController.MartingaleThreshold
                 : DelayedMartingaleThreshold;
 
@@ -232,7 +235,7 @@ namespace Blackjack
             _isSplitRound         = false;
             _activeHandIndex      = 0;
             _savedBetBeforeAction = 0;
-            _doubleDownExtraBet   = 0;
+            _betBeforeMartingale  = 0;
 
             chipBetting?.ClearBetArea();
 
@@ -422,7 +425,7 @@ namespace Blackjack
             StopBlackjackCelebration();
 
             // Show Martingale suggestion popup only after the player has lost exactly the threshold consecutive rounds.
-            bool consecutiveTrigger = _consecutiveLosses >= EffectiveMartingaleThreshold;
+            bool consecutiveTrigger = EffectiveMartingaleThreshold > 0 && _consecutiveLosses >= EffectiveMartingaleThreshold;
 
             if (martingalePopup != null
                 && consecutiveTrigger
@@ -442,10 +445,14 @@ namespace Blackjack
 
                         if (chipBetting != null)
                         {
-                            // Double the bet the player placed in the previous round.
-                            int doubledBet = _lastRoundBet * 2;
-                            chipBetting.SetBet(doubledBet, playSound: true);
-                            _martingaleChipValue = doubledBet;
+                            // Snapshot the bet placed before Martingale so we can restore it on a win.
+                            _betBeforeMartingale = chipBetting.TotalBet;
+
+                            // First entry into Martingale: bet abs(total amount lost) + 1 chip.
+                            int chipValue = chipBetting.SmallestChipValue;
+                            int nextBet   = (int)_totalAmountLost + chipValue;
+                            chipBetting.SetBet(nextBet, playSound: true);
+                            _martingaleChipValue = chipValue;
                         }
                         RefreshStreakLabel();
                         StartNewRound();
@@ -693,6 +700,11 @@ namespace Blackjack
 
             _dealerUpcardSnapshot = _dealerHand.Cards[0];
             bool hasPair = CanSplit();
+
+            // Highlight the recommended cell in the strategy table (if visible).
+            strategyTableUI?.HighlightRecommendation(
+                _playerHand, _dealerUpcardSnapshot,
+                canSplit: hasPair, canDouble: CanDoubleDown(), canSurrender: true);
 
             if (!hasPair && _playerHand.BestValue() <= AutoHitMaxScore)
             {
@@ -1082,8 +1094,6 @@ namespace Blackjack
             {
                 //string text = $"Lost: {_consecutiveLosses} times in row  |  -€ {_totalAmountLost:N2}";
                 string text = $"Lost: {(int)System.Math.Ceiling(_consecutiveLosses)} times in row";
-        if (_martingaleChipValue > 0)
-                    text += $"\nMartingale + € {_martingaleChipValue}";
                 streakLabel.text = text;
                 streakLabel.gameObject.SetActive(true);
             }
@@ -1181,6 +1191,7 @@ namespace Blackjack
         {
             _state = GameState.RoundOver;
             SetButtonState(dealEnabled: false, actionEnabled: false, splitEnabled: false);
+            strategyTableUI?.ClearHighlight();
             yield return new WaitForSeconds(endRoundDelay);
             chipBetting?.ResetMaxBet();
             chipBetting?.ClampBetToMaxBet();
@@ -1482,9 +1493,11 @@ namespace Blackjack
 
             if (_martingaleWin && chipBetting != null)
             {
-                chipBetting.ResetToMinimumBet();
+                int restoreBet = _betBeforeMartingale > 0 ? _betBeforeMartingale : chipBetting.SmallestChipValue;
+                chipBetting.SetBet(restoreBet);
                 chipBetting.SnapshotBet();
-                _martingaleWin = false;
+                _betBeforeMartingale = 0;
+                _martingaleWin       = false;
             }
         }
 

@@ -1,6 +1,7 @@
 using System;
 using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace Blackjack
@@ -40,6 +41,12 @@ namespace Blackjack
 
         /// <summary>Hides the popup immediately without invoking any callback.</summary>
         public void Hide() => ClearAndHide();
+
+        private void Update()
+        {
+            if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+                OnDoItClicked();
+        }
 
         private void OnDoItClicked()
         {

@@ -28,7 +28,7 @@ namespace Blackjack
         [SerializeField] private Toggle testSplitToggle;
         [SerializeField] private Toggle overrideStrategyToggle;
         [SerializeField] private Toggle alwaysLoseToggle;
-        [SerializeField] private Toggle martingaleThresholdToggle;
+        [SerializeField] private Toggle showStrategyToggle;
 
         [Header("Volume")]
         [SerializeField] private Slider volumeSlider;
@@ -42,6 +42,9 @@ namespace Blackjack
 
         [Header("Game Actions")]
         [SerializeField] private BlackjackGame blackjackGame;
+
+        [Header("Strategy Table")]
+        [SerializeField] private Blackjack.UI.StrategyTableUI strategyTableUI;
 
         private const string MasterVolumeParam = "MasterVolume";
 
@@ -64,8 +67,8 @@ namespace Blackjack
             testSplitToggle?.onValueChanged.AddListener(OnTestSplitToggled);
             overrideStrategyToggle?.onValueChanged.AddListener(OnOverrideStrategyToggled);
             alwaysLoseToggle?.onValueChanged.AddListener(OnAlwaysLoseToggled);
+            showStrategyToggle?.onValueChanged.AddListener(OnShowStrategyToggled);
             volumeSlider?.onValueChanged.AddListener(OnVolumeChanged);
-            martingaleThresholdToggle?.onValueChanged.AddListener(OnMartingaleThresholdToggled);
             martingaleThresholdSlider?.onValueChanged.AddListener(OnMartingaleThresholdChanged);
             testSplitRankSlider?.onValueChanged.AddListener(OnTestSplitRankChanged);
 
@@ -157,14 +160,16 @@ namespace Blackjack
             SettingsRepository.Save(_settings);
         }
 
-        private void OnMartingaleThresholdToggled(bool value)
+        private void OnMartingaleThresholdToggled(bool value) { }
+
+        private void OnShowStrategyToggled(bool value)
         {
-            _settings.martingaleThresholdEnabled = value;
+            _settings.showStrategyEnabled = value;
             SettingsRepository.Save(_settings);
+            strategyTableUI?.SetVisible(value);
         }
 
-        private void OnMartingaleThresholdChanged(float value)
-        {
+        private void OnMartingaleThresholdChanged(float value)        {
             _settings.martingaleThreshold = Mathf.RoundToInt(value);
             SettingsRepository.Save(_settings);
         }
@@ -194,12 +199,11 @@ namespace Blackjack
         /// <summary>When true, strategy deviation popup is bypassed and the player's action executes immediately.</summary>
         public bool IsStrategyOverrideEnabled => _settings.overrideStrategyEnabled;
 
-        /// <summary>
-        /// Returns the Martingale streak threshold from the menu slider when the toggle is on,
-        /// or -1 when the feature is disabled (so the popup never triggers via this path).
-        /// </summary>
-        public int MartingaleThreshold =>
-            _settings.martingaleThresholdEnabled ? _settings.martingaleThreshold : -1;
+        /// <summary>Returns the Martingale streak threshold from the menu slider.</summary>
+        public int MartingaleThreshold => _settings.martingaleThreshold;
+
+        /// <summary>When true, the strategy table should be visible to the player.</summary>
+        public bool IsShowStrategyEnabled => _settings.showStrategyEnabled;
 
         /// <summary>Returns the Rank integer (2–14) selected by the test-split slider.</summary>
         public int TestSplitRank => _settings.testSplitRank;
@@ -245,14 +249,15 @@ namespace Blackjack
             if (blackjackGame != null)
                 blackjackGame.AlwaysLose = _settings.alwaysLoseEnabled;
 
+            if (showStrategyToggle != null)
+                showStrategyToggle.SetIsOnWithoutNotify(_settings.showStrategyEnabled);
+            strategyTableUI?.SetVisible(_settings.showStrategyEnabled);
+
             if (volumeSlider != null)
                 volumeSlider.SetValueWithoutNotify(_settings.volume);
 
             if (audioMixer != null)
                 audioMixer.SetFloat(MasterVolumeParam, LinearToDb(_settings.volume));
-
-            if (martingaleThresholdToggle != null)
-                martingaleThresholdToggle.SetIsOnWithoutNotify(_settings.martingaleThresholdEnabled);
 
             if (martingaleThresholdSlider != null)
                 martingaleThresholdSlider.SetValueWithoutNotify(_settings.martingaleThreshold);

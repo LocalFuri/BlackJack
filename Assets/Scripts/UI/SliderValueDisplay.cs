@@ -14,6 +14,16 @@ namespace Blackjack.UI
         /// </summary>
         [SerializeField] private bool useRankLabels;
 
+        /// <summary>
+        /// When greater than or equal to 0, the label is tinted with <see cref="aboveThresholdColor"/>
+        /// whenever the slider value exceeds this threshold, and reverts to <see cref="defaultColor"/> otherwise.
+        /// Set to -1 to disable color tinting entirely.
+        /// </summary>
+        [SerializeField] private int colorThreshold = -1;
+
+        [SerializeField] private Color aboveThresholdColor = Color.red;
+        [SerializeField] private Color defaultColor        = Color.white;
+
         private void Start()
         {
             var slider = GetComponent<Slider>();
@@ -25,7 +35,11 @@ namespace Blackjack.UI
 
         private void UpdateLabel(float value)
         {
-            valueLabel.text = FormatValue(Mathf.RoundToInt(value));
+            int intValue = Mathf.RoundToInt(value);
+            valueLabel.text = FormatValue(intValue);
+
+            if (colorThreshold >= 0 && valueLabel != null)
+                valueLabel.color = intValue > colorThreshold ? aboveThresholdColor : defaultColor;
         }
 
         private string FormatValue(int intValue)

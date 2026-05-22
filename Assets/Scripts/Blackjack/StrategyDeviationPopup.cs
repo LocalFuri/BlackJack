@@ -1,6 +1,7 @@
 using System;
 using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace Blackjack
@@ -36,6 +37,12 @@ namespace Blackjack
             _onKeep           = onKeep;
             _onReconsider     = onReconsider;
             gameObject.SetActive(true);
+        }
+
+        private void Update()
+        {
+            if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+                OnKeepClicked();
         }
 
         private void OnKeepClicked()
