@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f7559cd33453784494a39ffd4ef0f74, type: 3}
+  m_Name: UISoundsConfig
+  m_EditorClassIdentifier: 
+  closeSound:
+    clip: {fileID: 8300000, guid: bb485ef058a851148a35ed664aa421d8, type: 3}
+    volume: 0.53
+  dontTouchMeSound:
+    clip: {fileID: 8300000, guid: e360f7e744cc7bb41aa388e62dbb8949, type: 3}
+    volume: 1
+  toggleSound:
+    clip: {fileID: 8300000, guid: 32bfeb26f2128e441896331e3e4a9a51, type: 3}
+    volume: 1

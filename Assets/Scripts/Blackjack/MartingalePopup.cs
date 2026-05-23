@@ -16,6 +16,9 @@ namespace Blackjack
         [SerializeField] private Button doItButton;
         [SerializeField] private Button reconsiderButton;
 
+        [Header("Audio")]
+        [SerializeField] private UISoundsConfig uiSounds;
+
         private Action _onDoIt;
         private Action _onReconsider;
 
@@ -66,6 +69,8 @@ namespace Blackjack
         {
             _onDoIt       = null;
             _onReconsider = null;
+            if (uiSounds != null && uiSounds.closeSound.HasClip)
+                AudioSource.PlayClipAtPoint(uiSounds.closeSound.clip, Vector3.zero, uiSounds.closeSound.volume);
             gameObject.SetActive(false);
         }
     }

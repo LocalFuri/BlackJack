@@ -2325,6 +2325,7 @@ MonoBehaviour:
   ddTestButton: {fileID: 751962546}
   splitAvailableSprite: {fileID: 21300000, guid: bd4be424aa200924988f1dc96eb4ca5b, type: 3}
   menuController: {fileID: 383359004}
+  strategyTableUI: {fileID: 1860292068}
   playerScoreLabel: {fileID: 37040486}
   dealerScoreLabel: {fileID: 37115721}
   statusLabel: {fileID: 413939825}
@@ -2360,7 +2361,7 @@ MonoBehaviour:
     volume: 1
   exitSound:
     clip: {fileID: 8300000, guid: bb485ef058a851148a35ed664aa421d8, type: 3}
-    volume: 0.28
+    volume: 0.2
   knockSound:
     clip: {fileID: 8300000, guid: babd8fa50fa977f4881b58111a1ab364, type: 3}
     volume: 0.76
@@ -2589,6 +2590,8 @@ MonoBehaviour:
   testSplitRankSlider: {fileID: 241324253}
   blackjackGame: {fileID: 383358998}
   strategyTableUI: {fileID: 1860292068}
+  uiSounds: {fileID: 11400000, guid: 60decf6ddf43b154c8d0e5781e7d3165, type: 2}
+  audioSource: {fileID: 383359001}
 --- !u!1 &388425493
 GameObject:
   m_ObjectHideFlags: 0
@@ -2600,6 +2603,7 @@ GameObject:
   - component: {fileID: 388425494}
   - component: {fileID: 388425496}
   - component: {fileID: 388425495}
+  - component: {fileID: 388425497}
   m_Layer: 0
   m_Name: DealerImage
   m_TagString: Untagged
@@ -2640,7 +2644,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 0
+  m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
@@ -2664,6 +2668,19 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 388425493}
   m_CullTransparentMesh: 1
+--- !u!114 &388425497
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 388425493}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b61216b184717d742b03224563ebf561, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  uiSounds: {fileID: 11400000, guid: 60decf6ddf43b154c8d0e5781e7d3165, type: 2}
 --- !u!1 &408005099
 GameObject:
   m_ObjectHideFlags: 0
@@ -3301,6 +3318,7 @@ MonoBehaviour:
   messageLabel: {fileID: 1483616294}
   keepButton: {fileID: 653691185}
   reconsiderButton: {fileID: 924326561}
+  uiSounds: {fileID: 11400000, guid: 60decf6ddf43b154c8d0e5781e7d3165, type: 2}
 --- !u!114 &446042941
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10803,7 +10821,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -10, y: -10}
+  m_AnchoredPosition: {x: -164, y: -104}
   m_SizeDelta: {x: 400, y: 700}
   m_Pivot: {x: 1, y: 1}
 --- !u!114 &1860292068
@@ -12171,6 +12189,7 @@ MonoBehaviour:
   messageLabel: {fileID: 810186794}
   doItButton: {fileID: 2108367131}
   reconsiderButton: {fileID: 1644131635}
+  uiSounds: {fileID: 11400000, guid: 60decf6ddf43b154c8d0e5781e7d3165, type: 2}
 --- !u!114 &2063986683
 MonoBehaviour:
   m_ObjectHideFlags: 0

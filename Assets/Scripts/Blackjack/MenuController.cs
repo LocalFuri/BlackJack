@@ -10,6 +10,7 @@ namespace Blackjack
     /// Controls visibility of the three test buttons and the master volume.
     /// All changes are persisted to disk via <see cref="SettingsRepository"/>.
     /// </summary>
+    [RequireComponent(typeof(AudioSource))]
     public class MenuController : MonoBehaviour
     {
         [Header("Menu Panel")]
@@ -46,6 +47,10 @@ namespace Blackjack
         [Header("Strategy Table")]
         [SerializeField] private Blackjack.UI.StrategyTableUI strategyTableUI;
 
+        [Header("Audio")]
+        [SerializeField] private UISoundsConfig uiSounds;
+        [SerializeField] private AudioSource audioSource;
+
         private const string MasterVolumeParam = "MasterVolume";
 
         private OptionsSettings _settings;
@@ -56,6 +61,9 @@ namespace Blackjack
 
         private void Awake()
         {
+            if (audioSource == null)
+                audioSource = GetComponent<AudioSource>();
+
             _settings = SettingsRepository.Load();
 
             ApplySettings();
@@ -71,6 +79,15 @@ namespace Blackjack
             volumeSlider?.onValueChanged.AddListener(OnVolumeChanged);
             martingaleThresholdSlider?.onValueChanged.AddListener(OnMartingaleThresholdChanged);
             testSplitRankSlider?.onValueChanged.AddListener(OnTestSplitRankChanged);
+
+            // Play toggle sound whenever any checkbox is turned on.
+            foreach (var toggle in new[] { blackjackTestToggle, bjAllToggle, ddTestToggle,
+                                           testSplitToggle, overrideStrategyToggle,
+                                           alwaysLoseToggle, showStrategyToggle })
+            {
+                if (toggle != null)
+                    toggle.onValueChanged.AddListener(OnToggleSoundPlay);
+            }
 
             menuPanel?.SetActive(false);
         }
@@ -88,7 +105,27 @@ namespace Blackjack
         {
             if (Keyboard.current != null && Keyboard.current.f2Key.wasPressedThisFrame)
                 ToggleMenu();
+
+            if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
+                TryCloseStrategyTable();
         }
+
+        /// <summary>Closes the strategy table on right-click, unchecks the toggle, and plays the exit sound.</summary>
+        private void TryCloseStrategyTable()
+        {
+            if (strategyTableUI == null || !strategyTableUI.gameObject.activeSelf) return;
+
+            strategyTableUI.SetVisible(false);
+
+            _settings.showStrategyEnabled = false;
+            SettingsRepository.Save(_settings);
+            showStrategyToggle?.SetIsOnWithoutNotify(false);
+
+            uiSounds?.closeSound.Play(audioSource);
+        }
+
+        /// <summary>Plays the toggle click sound whenever any option checkbox changes value.</summary>
+        private void OnToggleSoundPlay(bool _) => uiSounds?.toggleSound.Play(audioSource);
 
         private void OnDestroy()
         {
@@ -212,14 +249,19 @@ namespace Blackjack
         private void ToggleMenu()
         {
             if (menuPanel == null) return;
-            menuPanel.SetActive(!menuPanel.activeSelf);
+            bool closing = menuPanel.activeSelf;
+            menuPanel.SetActive(!closing);
+            if (closing) uiSounds?.closeSound.Play(audioSource);
         }
 
         /// <summary>Closes the menu panel if it is currently open.</summary>
         public void CloseMenu()
         {
             if (menuPanel != null && menuPanel.activeSelf)
+            {
                 menuPanel.SetActive(false);
+                uiSounds?.closeSound.Play(audioSource);
+            }
         }
 
         /// <summary>Pushes all loaded settings into the UI and the AudioMixer.</summary>

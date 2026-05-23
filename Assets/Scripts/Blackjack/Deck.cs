@@ -86,7 +86,7 @@ namespace Blackjack
         {
             PlaceAtIndex(new CardData(Suit.Spades,  rank), _cards.Count - 1);
             PlaceAtIndex(new CardData(Suit.Hearts,  rank), _cards.Count - 3);
-        }
+        
 
         /// <summary>
         /// Manipulates the top of the deck so the player's first two cards
