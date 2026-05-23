@@ -32,7 +32,7 @@ namespace Blackjack.UI
         // ── Layout constants ──────────────────────────────────────────────────────
         private const float Pad         = 4f;
         private const float SectionLblW = 22f;
-        private const float LabelColW   = 90f;
+        private const float LabelColW   = 115f;
         private const float DataColW    = 28f;
         private const float RowH        = 18f;
         private const float HeaderRowH  = 15f;
@@ -61,20 +61,22 @@ namespace Blackjack.UI
             ("A,5 (Soft 16)", new[]{ Act.H, Act.H, Act.D, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
             ("A,6 (Soft 17)", new[]{ Act.H, Act.D, Act.D, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
             ("A,7 (Soft 18)", new[]{ Act.D, Act.D, Act.D, Act.D, Act.D, Act.S, Act.S, Act.H, Act.H, Act.H }),
-            ("A,8 (Soft 19)", new[]{ Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S }),
+            ("A,8 (Soft 19)", new[]{ Act.S, Act.S, Act.S, Act.S, Act.D, Act.S, Act.S, Act.S, Act.S, Act.S }),
             ("A,9 (Soft 20)", new[]{ Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S }),
         };
 
         private static readonly (string label, Act[] cols)[] HardRows =
         {
+            ("17+", new[]{ Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S }),
             ("16", new[]{ Act.S, Act.S, Act.S, Act.S, Act.S, Act.H, Act.H, Act.R, Act.R, Act.R }),
             ("15", new[]{ Act.S, Act.S, Act.S, Act.S, Act.S, Act.H, Act.H, Act.H, Act.R, Act.H }),
             ("14", new[]{ Act.S, Act.S, Act.S, Act.S, Act.S, Act.H, Act.H, Act.H, Act.H, Act.H }),
             ("13", new[]{ Act.S, Act.S, Act.S, Act.S, Act.S, Act.H, Act.H, Act.H, Act.H, Act.H }),
             ("12", new[]{ Act.H, Act.H, Act.S, Act.S, Act.S, Act.H, Act.H, Act.H, Act.H, Act.H }),
-            ("11", new[]{ Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.H }),
+            ("11", new[]{ Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D }),
             ("10", new[]{ Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.H, Act.H }),
             ("9",  new[]{ Act.H, Act.D, Act.D, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
+            ("8 to 2", new[]{ Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H }),
         };
 
         private static readonly (string label, Act[] cols)[] PairRows =
@@ -144,16 +146,16 @@ namespace Blackjack.UI
 
             float curY = Pad;
 
-            _softCells = BuildSection("SOFT TOTALS", SoftRows, curY);
+            _softCells = BuildSection("SOFT TOTALS", SoftRows, curY, TableW);
             curY += SectionH(SoftRows.Length) + Border;
 
-            _hardCells = BuildSection("HARD TOTALS", HardRows, curY);
+            _hardCells = BuildSection("HARD TOTALS", HardRows, curY, TableW);
             curY += SectionH(HardRows.Length) + Border;
 
-            _pairCells = BuildSection("PAIRS", PairRows, curY);
+            _pairCells = BuildSection("PAIRS", PairRows, curY, TableW);
             curY += SectionH(PairRows.Length) + Pad;
 
-            BuildLegend(curY);
+            BuildLegend(curY, TableW);
             curY += LegendH + Pad;
 
             // Auto-size root to fit all content
@@ -163,63 +165,69 @@ namespace Blackjack.UI
 
         // ── Legend ────────────────────────────────────────────────────────────────
 
-        private static readonly (Act act, string name)[] LegendEntries =
+        // labelW approximates each word's rendered width at FontHead size so the
+        // space-between gap is equal regardless of text length.
+        private static readonly (Act act, string name, float labelW)[] LegendEntries =
         {
-            (Act.H, "Hit"),
-            (Act.S, "Stand"),
-            (Act.D, "Double"),
-            (Act.P, "Split"),
-            (Act.R, "Surrender"),
+            (Act.H, "Hit",       26f),
+            (Act.S, "Stand",     50f),
+            (Act.D, "Double",    58f),
+            (Act.P, "Split",     38f),
+            (Act.R, "Surrender", 82f),
         };
 
-        private const float LegendH        = 22f;
-        private const float LegendSwatchW  = 22f;
-        private const float LegendItemGap  = 8f;
-        private const float LegendPadH     = 4f;
+        private const float LegendH       = 22f;
+        private const float LegendSwatchW = 22f;
+        private const float LegendPadH    = 4f;
 
-        private void BuildLegend(float topY)
+        private void BuildLegend(float topY, float availableW)
         {
-            // Measure total legend width to centre it under the table
-            int   n         = LegendEntries.Length;
-            float itemW     = LegendSwatchW + Pad + DataColW * 3f; // swatch + label space
-            float totalW    = n * itemW + (n - 1) * LegendItemGap;
-            float startX    = (TableW - totalW) / 2f + Pad;        // centred
+            int n = LegendEntries.Length;
 
-            var legendGO = Rect(gameObject, "Legend", Pad, topY, TableW, LegendH);
+            // Total natural width of all items (swatch + inner pad + per-word label).
+            float totalItemW = 0f;
+            foreach (var e in LegendEntries)
+                totalItemW += LegendSwatchW + Pad + e.labelW;
+
+            // Distribute remaining space as equal gaps between items (space-between).
+            float gap     = (n > 1) ? (availableW - totalItemW) / (n - 1) : 0f;
+            float swatchH = LegendH - LegendPadH * 2f;
+
+            var legendGO = Rect(gameObject, "Legend", Pad, topY, availableW, LegendH);
             legendGO.AddComponent<Image>().color = ColSectionBg;
 
-            float swatchH   = LegendH - LegendPadH * 2f;
-
+            float curX = 0f;
             for (int i = 0; i < n; i++)
             {
-                var (act, label) = LegendEntries[i];
-                float itemX = startX + i * (itemW + LegendItemGap);
+                var (act, label, labelW) = LegendEntries[i];
 
                 // Coloured swatch
                 var swatch = Rect(legendGO, "Swatch" + i,
-                                  itemX, LegendPadH, LegendSwatchW, swatchH);
+                                  curX, LegendPadH, LegendSwatchW, swatchH);
                 swatch.AddComponent<Image>().color = ActColor(act);
                 AddLabel(swatch, ActLabel(act), FontCell, FontStyles.Bold,
                          ColCellText, TextAlignmentOptions.Center);
 
-                // Text label next to swatch
+                // Text label immediately right of the swatch
                 var txt = Rect(legendGO, "LegendTxt" + i,
-                               itemX + LegendSwatchW + Pad, LegendPadH,
-                               itemW - LegendSwatchW - Pad, swatchH);
+                               curX + LegendSwatchW + Pad, LegendPadH,
+                               labelW, swatchH);
                 AddLabel(txt, label, FontHead, FontStyles.Normal,
                          ColCellText, TextAlignmentOptions.MidlineLeft);
+
+                curX += LegendSwatchW + Pad + labelW + gap;
             }
         }
 
         private GameObject[,] BuildSection(string title,
                                            (string label, Act[] cols)[] rows,
-                                           float topY)
+                                           float topY, float rootInnerW)
         {
             int   rowCount = rows.Length;
             float secH     = SectionH(rowCount);
 
             // Section GO sits inside the root, offset by Pad on left
-            var secGO = Rect(gameObject, "Sec_" + title, Pad, topY, TableW, secH);
+            var secGO = Rect(gameObject, "Sec_" + title, Pad, topY, rootInnerW, secH);
             secGO.AddComponent<Image>().color = ColBorder;
 
             // ── Rotated section label ─────────────────────────────────────────────
@@ -363,14 +371,16 @@ namespace Blackjack.UI
 
         private static int HardRowIndex(int total)
         {
-            if (total >= 16) return 0;
-            if (total == 15) return 1;
-            if (total == 14) return 2;
-            if (total == 13) return 3;
-            if (total == 12) return 4;
-            if (total == 11) return 5;
-            if (total == 10) return 6;
-            return 7;
+            if (total >= 17) return 0;
+            if (total == 16) return 1;
+            if (total == 15) return 2;
+            if (total == 14) return 3;
+            if (total == 13) return 4;
+            if (total == 12) return 5;
+            if (total == 11) return 6;
+            if (total == 10) return 7;
+            if (total == 9)  return 8;
+            return 9;
         }
 
         private static int PairRowIndex(int pairKey)

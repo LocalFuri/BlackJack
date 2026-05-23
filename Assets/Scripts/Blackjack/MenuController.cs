@@ -51,6 +51,9 @@ namespace Blackjack
         [SerializeField] private UISoundsConfig uiSounds;
         [SerializeField] private AudioSource audioSource;
 
+        [Header("Controls")]
+        [SerializeField] private KeyboardControls controls;
+
         private const string MasterVolumeParam = "MasterVolume";
 
         private OptionsSettings _settings;
@@ -103,7 +106,7 @@ namespace Blackjack
 
         private void Update()
         {
-            if (Keyboard.current != null && Keyboard.current.f2Key.wasPressedThisFrame)
+            if (controls != null && controls.ToggleMenuPressed)
                 ToggleMenu();
 
             if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
@@ -121,7 +124,7 @@ namespace Blackjack
             SettingsRepository.Save(_settings);
             showStrategyToggle?.SetIsOnWithoutNotify(false);
 
-            uiSounds?.closeSound.Play(audioSource);
+            blackjackGame?.PlayCloseSound();
         }
 
         /// <summary>Plays the toggle click sound whenever any option checkbox changes value.</summary>
@@ -251,7 +254,7 @@ namespace Blackjack
             if (menuPanel == null) return;
             bool closing = menuPanel.activeSelf;
             menuPanel.SetActive(!closing);
-            if (closing) uiSounds?.closeSound.Play(audioSource);
+            if (closing) blackjackGame?.PlayCloseSound();
         }
 
         /// <summary>Closes the menu panel if it is currently open.</summary>
@@ -260,7 +263,7 @@ namespace Blackjack
             if (menuPanel != null && menuPanel.activeSelf)
             {
                 menuPanel.SetActive(false);
-                uiSounds?.closeSound.Play(audioSource);
+                blackjackGame?.PlayCloseSound();
             }
         }
 

@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 namespace Blackjack
 {
     /// <summary>
-    /// Quits the application when the right mouse button is pressed.
+    /// Quits the application when the quit key is pressed (default: Escape).
     /// Plays an exit sound via BlackjackGame before quitting.
     /// In the Editor, stops Play Mode instead.
     /// </summary>
@@ -13,21 +13,23 @@ namespace Blackjack
     {
         [SerializeField] private BlackjackGame gameManager;
 
+        [Header("Controls")]
+        [SerializeField] private KeyboardControls controls;
+
         private bool _isQuitting;
 
         private void Update()
         {
             if (_isQuitting) return;
-            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) //qKey etc.
-            {
-                if (gameManager != null && gameManager.IsMenuOpen)
-                {
-                    gameManager.CloseMenu();
-                    return;
-                }
+            if (controls == null || !controls.QuitPressed) return;
 
-                StartCoroutine(PlaySoundThenQuit());
+            if (gameManager != null && gameManager.IsMenuOpen)
+            {
+                gameManager.CloseMenu();
+                return;
             }
+
+            StartCoroutine(PlaySoundThenQuit());
         }
 
         private IEnumerator PlaySoundThenQuit()

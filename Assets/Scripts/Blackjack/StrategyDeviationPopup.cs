@@ -19,6 +19,9 @@ namespace Blackjack
         [Header("Audio")]
         [SerializeField] private UISoundsConfig uiSounds;
 
+        [Header("Controls")]
+        [SerializeField] private KeyboardControls controls;
+
         private Action _onKeep;
         private Action _onReconsider;
 
@@ -44,7 +47,7 @@ namespace Blackjack
 
         private void Update()
         {
-            if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+            if (controls != null && controls.DealOrHitPressed)
                 OnKeepClicked();
         }
 

@@ -2355,7 +2355,7 @@ MonoBehaviour:
     volume: 1
   hmhSound:
     clip: {fileID: 8300000, guid: 31079221b5618d34cbe708c014412244, type: 3}
-    volume: 0.48
+    volume: 0.66
   dealCardSound:
     clip: {fileID: 8300000, guid: f6a41ed8c1389984fbc5f1c6ec4ef036, type: 3}
     volume: 1
@@ -2364,7 +2364,7 @@ MonoBehaviour:
     volume: 0.2
   knockSound:
     clip: {fileID: 8300000, guid: babd8fa50fa977f4881b58111a1ab364, type: 3}
-    volume: 0.76
+    volume: 0.47
   loseSound:
     clip: {fileID: 8300000, guid: d2d47448e3808304fb70067a429664b8, type: 3}
     volume: 1
@@ -2393,6 +2393,7 @@ MonoBehaviour:
   dealerPauseDelay: 0.7
   endRoundDelay: 0
   newRoundPause: 0.5
+  controls: {fileID: 11400000, guid: 5599a331733b13a4e8a7f08b7c64714c, type: 2}
 --- !u!114 &383358999
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2406,6 +2407,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Blackjack.QuitOnRightClick
   gameManager: {fileID: 383358998}
+  controls: {fileID: 11400000, guid: 5599a331733b13a4e8a7f08b7c64714c, type: 2}
 --- !u!82 &383359001
 AudioSource:
   m_ObjectHideFlags: 0
@@ -2592,6 +2594,7 @@ MonoBehaviour:
   strategyTableUI: {fileID: 1860292068}
   uiSounds: {fileID: 11400000, guid: 60decf6ddf43b154c8d0e5781e7d3165, type: 2}
   audioSource: {fileID: 383359001}
+  controls: {fileID: 11400000, guid: 5599a331733b13a4e8a7f08b7c64714c, type: 2}
 --- !u!1 &388425493
 GameObject:
   m_ObjectHideFlags: 0
@@ -3319,6 +3322,7 @@ MonoBehaviour:
   keepButton: {fileID: 653691185}
   reconsiderButton: {fileID: 924326561}
   uiSounds: {fileID: 11400000, guid: 60decf6ddf43b154c8d0e5781e7d3165, type: 2}
+  controls: {fileID: 11400000, guid: 5599a331733b13a4e8a7f08b7c64714c, type: 2}
 --- !u!114 &446042941
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10821,8 +10825,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -164, y: -104}
-  m_SizeDelta: {x: 400, y: 700}
+  m_AnchoredPosition: {x: -243, y: -104}
+  m_SizeDelta: {x: 400, y: 800}
   m_Pivot: {x: 1, y: 1}
 --- !u!114 &1860292068
 MonoBehaviour:
@@ -12190,6 +12194,7 @@ MonoBehaviour:
   doItButton: {fileID: 2108367131}
   reconsiderButton: {fileID: 1644131635}
   uiSounds: {fileID: 11400000, guid: 60decf6ddf43b154c8d0e5781e7d3165, type: 2}
+  controls: {fileID: 11400000, guid: 5599a331733b13a4e8a7f08b7c64714c, type: 2}
 --- !u!114 &2063986683
 MonoBehaviour:
   m_ObjectHideFlags: 0

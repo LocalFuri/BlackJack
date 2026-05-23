@@ -104,6 +104,9 @@ namespace Blackjack
         [SerializeField] private float endRoundDelay      = 3.0f;
         [SerializeField] private float newRoundPause      = 0.5f;
 
+        [Header("Controls")]
+        [SerializeField] private KeyboardControls controls;
+
         // ──────────────────────────────────────────────────────────────────────────
         // Constants mark auto
         // ──────────────────────────────────────────────────────────────────────────
@@ -357,6 +360,9 @@ namespace Blackjack
             return exitSound.Length;
         }
 
+        /// <summary>Plays the exit sound without returning a duration. Used by menu close actions.</summary>
+        public void PlayCloseSound() => exitSound.Play(audioSource);
+
         /// <summary>Plays the knock sound.</summary>
         public void PlayKnockSound()
         {
@@ -405,7 +411,7 @@ namespace Blackjack
 
         private void Update()
         {
-            if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+            if (controls != null && controls.DealOrHitPressed)
             {
                 if (hitButton != null && hitButton.gameObject.activeSelf)
                     OnHit();

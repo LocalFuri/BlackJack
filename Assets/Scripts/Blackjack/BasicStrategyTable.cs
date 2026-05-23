@@ -31,7 +31,7 @@ namespace Blackjack
             /* H8  */ { SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit    },
             /* H9  */ { SA.Hit,    SA.Double, SA.Double, SA.Double, SA.Double, SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit    },
             /* H10 */ { SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Hit,    SA.Hit    },
-            /* H11 */ { SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Hit    },
+            /* H11 */ { SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Double },
             /* H12 */ { SA.Hit,    SA.Hit,    SA.Stand,  SA.Stand,  SA.Stand,  SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit    },
             /* H13 */ { SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit    },
             /* H14 */ { SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit    },
@@ -53,7 +53,7 @@ namespace Blackjack
             /* S16 = A5 */ { SA.Hit,    SA.Hit,    SA.Double, SA.Double, SA.Double, SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit    },
             /* S17 = A6 */ { SA.Hit,    SA.Double, SA.Double, SA.Double, SA.Double, SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit    },
             /* S18 = A7 */ { SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Stand,  SA.Stand,  SA.Hit,    SA.Hit,    SA.Hit    },
-            /* S19 = A8 */ { SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand  },
+            /* S19 = A8 */ { SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Double, SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand  },
             /* S20 = A9 */ { SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand  },
             /* S21 = AA */ { SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand,  SA.Stand  },
         };

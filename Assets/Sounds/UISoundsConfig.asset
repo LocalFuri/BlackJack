@@ -20,4 +20,4 @@ MonoBehaviour:
     volume: 1
   toggleSound:
     clip: {fileID: 8300000, guid: 32bfeb26f2128e441896331e3e4a9a51, type: 3}
-    volume: 1
+    volume: 0.518
