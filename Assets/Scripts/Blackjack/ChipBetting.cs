@@ -62,6 +62,9 @@ namespace Blackjack
         [Tooltip("Size of each chip image rect in the bet area.")]
         [SerializeField] private Vector2 chipSize = new(60f, 60f);
 
+        [Tooltip("Horizontal offset applied to all chip columns, allowing space for a label to the left.")]
+        [SerializeField] private float chipStartOffsetX = 0f;
+
         [Header("Limits")]
         [Tooltip("Maximum total bet the player is allowed to place.")]
         [SerializeField] private int maxBet = 1000;
@@ -422,7 +425,7 @@ namespace Blackjack
                 {
                     if (!blackjackGame.IsBettingAllowed && !blackjackGame.IsRoundOver)
                         return;
-                    blackjackGame.CloseMenu();
+                    blackjackGame.CloseMenu(playSound: false);
                 }
 
                 if (blackjackGame.IsLimitPulsing)
@@ -643,7 +646,7 @@ namespace Blackjack
 
         private GameObject CreateChipGO(int typeIndex, int col, int stackHeight)
         {
-            float x = chipSize.x * 0.5f + col * columnSpacing;
+            float x = chipStartOffsetX + chipSize.x * 0.5f + col * columnSpacing;
             float y = stackHeight * stackOffsetY;
 
             GameObject go = new($"BetChip_{chipTypes[typeIndex].value}_{stackHeight}");
@@ -672,7 +675,7 @@ namespace Blackjack
                 int typeIndex = _columnOrder[col];
                 if (!_stacks.TryGetValue(typeIndex, out List<GameObject> stack)) continue;
 
-                float x = chipSize.x * 0.5f + col * columnSpacing;
+                float x = chipStartOffsetX + chipSize.x * 0.5f + col * columnSpacing;
                 for (int s = 0; s < stack.Count; s++)
                 {
                     if (stack[s] == null) continue;
@@ -701,61 +704,52 @@ namespace Blackjack
             //betSumLabel.text = $"Bet: € {((decimal)TotalBet).ToString("N2", GermanCulture)}";
             //betSumLabel.text = $"Bet: € {TotalBet}"; //no separators
             betSumLabel.text = $"€ {(TotalBet).ToString("N0", GermanCulture)}"; //N2 = decimal digits
-            PositionBetLabelAboveTallestStack();
+            PositionBetLabelLeftOfLowestChip();
         }
 
-        /// <summary>Moves the bet sum label so its bottom edge sits above the tallest chip pile, horizontally centered on that column.</summary>
-        private void PositionBetLabelAboveTallestStack()
+        /// <summary>
+        /// Positions the bet sum label to the left of the leftmost chip column,
+        /// vertically aligned with the lowest (first) chip in that column.
+        /// </summary>
+        private void PositionBetLabelLeftOfLowestChip()
         {
             if (betSumLabel == null) return;
 
             RectTransform labelRT = betSumLabel.GetComponent<RectTransform>();
             if (labelRT == null) return;
 
-            if (_stacks.Count == 0)
+            if (_stacks.Count == 0 || _columnOrder.Count == 0)
             {
                 labelRT.anchoredPosition = Vector2.zero;
                 return;
             }
 
-            int tallestType = -1;
-            int tallestCount = 0;
-            float leftmostX  = float.MaxValue;
-            float rightmostX = float.MinValue;
+            // Find the leftmost column's bottom chip
+            float leftmostX = float.MaxValue;
+            float lowestChipY = 0f;
 
-            foreach (KeyValuePair<int, List<GameObject>> kvp in _stacks)
+            foreach (int typeIndex in _columnOrder)
             {
-                if (kvp.Value.Count == 0) continue;
+                if (!_stacks.TryGetValue(typeIndex, out List<GameObject> stack) || stack.Count == 0) continue;
 
-                if (kvp.Value.Count > tallestCount)
+                RectTransform bottomChipRT = stack[0].GetComponent<RectTransform>();
+                float chipLeftEdge = bottomChipRT.anchoredPosition.x;
+
+                if (chipLeftEdge < leftmostX)
                 {
-                    tallestCount = kvp.Value.Count;
-                    tallestType  = kvp.Key;
+                    leftmostX   = chipLeftEdge;
+                    lowestChipY = bottomChipRT.anchoredPosition.y;
                 }
-
-                // Use bottom chip in each column for the X position (all chips in a column share the same X)
-                RectTransform bottomChipRT = kvp.Value[0].GetComponent<RectTransform>();
-                float chipLeft  = bottomChipRT.anchoredPosition.x;
-                float chipRight = chipLeft + chipSize.x * betChipScale;
-
-                if (chipLeft  < leftmostX)  leftmostX  = chipLeft;
-                if (chipRight > rightmostX) rightmostX = chipRight;
             }
 
-            if (tallestType < 0)
-            {
-                labelRT.anchoredPosition = Vector2.zero;
-                return;
-            }
+            const float LabelGap = 8f;
+            float labelWidth  = labelRT.sizeDelta.x;
 
-            List<GameObject> tallestStack = _stacks[tallestType];
-            GameObject topChip = tallestStack[tallestStack.Count - 1];
-            RectTransform topChipRT = topChip.GetComponent<RectTransform>();
-
-            float horizontalCenter = (leftmostX + rightmostX) * 0.5f;
-            float stackTopY = topChipRT.anchoredPosition.y + chipSize.y * betChipScale * 0.5f;
-
-            labelRT.anchoredPosition = new Vector2(horizontalCenter, stackTopY);
+            // Right-align the label just before the leftmost chip, centred on the lowest chip's Y
+            labelRT.anchorMin = new Vector2(0f, 0.5f);
+            labelRT.anchorMax = new Vector2(0f, 0.5f);
+            labelRT.pivot     = new Vector2(1f, 0.5f);  // pivot at right edge so it grows leftward
+            labelRT.anchoredPosition = new Vector2(leftmostX - LabelGap, lowestChipY);
         }
 
     }

@@ -21,7 +21,7 @@ namespace Blackjack.UI
         private static readonly Color ColStand      = new Color(0.70f, 0.67f, 0.22f, 1f);
         private static readonly Color ColDouble     = new Color(0.20f, 0.50f, 0.20f, 1f);
         private static readonly Color ColSplit      = new Color(0.48f, 0.25f, 0.62f, 1f);
-        private static readonly Color ColSurrender  = new Color(0.75f, 0.20f, 0.20f, 1f);
+        private static readonly Color ColSurrender  = new Color(0.15f, 0.75f, 0.80f, 1f);
         private static readonly Color ColHeader     = new Color(0.16f, 0.16f, 0.20f, 1f);
         private static readonly Color ColSectionBg  = new Color(0.11f, 0.11f, 0.14f, 1f);
         private static readonly Color ColDealerBg   = new Color(0.12f, 0.18f, 0.25f, 1f);
@@ -97,8 +97,17 @@ namespace Blackjack.UI
         private GameObject[,] _softCells;
         private GameObject[,] _hardCells;
         private GameObject[,] _pairCells;
+        private GameObject[]  _softLabels;
+        private GameObject[]  _hardLabels;
+        private GameObject[]  _pairLabels;
         private GameObject    _currentHighlight;
+        private GameObject    _currentLabelHighlight;
         private bool          _built;
+
+        // Raw action data retained so cells can be re-colored when available actions change.
+        private Act[,] _softActions;
+        private Act[,] _hardActions;
+        private Act[,] _pairActions;
 
         // ── Lifecycle ─────────────────────────────────────────────────────────────
         private void Start() => EnsureBuilt();
@@ -123,19 +132,67 @@ namespace Blackjack.UI
         public void HighlightRecommendation(Hand hand, CardData dealerUpcard,
                                             bool canSplit, bool canDouble, bool canSurrender)
         {
+            EnsureBuilt();
+            UpdateActionAvailability(canDouble, canSurrender);
             ClearHighlight();
             int col = DealerCol(dealerUpcard);
-            var cell = FindCell(hand, canSplit, col);
+            var cell = FindCell(hand, canSplit, col, out var labelCell);
             if (cell != null) ShowHighlight(cell);
+            if (labelCell != null) ShowHighlight(labelCell, isLabel: true);
+        }
+
+        /// <summary>
+        /// Re-colors all data cells to reflect which actions are currently available.
+        /// R cells become H when surrender is not allowed; D cells become H when double is not allowed.
+        /// </summary>
+        private void UpdateActionAvailability(bool canDouble, bool canSurrender)
+        {
+            ApplyAvailability(_softCells, _softActions, canDouble, canSurrender);
+            ApplyAvailability(_hardCells, _hardActions, canDouble, canSurrender);
+            ApplyAvailability(_pairCells, _pairActions, canDouble, canSurrender);
+        }
+
+        private void ApplyAvailability(GameObject[,] cells, Act[,] actions, bool canDouble, bool canSurrender)
+        {
+            if (cells == null || actions == null) return;
+            int rows = cells.GetLength(0);
+            int cols = cells.GetLength(1);
+            for (int r = 0; r < rows; r++)
+            {
+                for (int c = 0; c < cols; c++)
+                {
+                    var go = cells[r, c];
+                    if (go == null) continue;
+                    Act resolved = ResolveAct(actions[r, c], canDouble, canSurrender);
+                    go.GetComponent<Image>().color = ActColor(resolved);
+                    var tmp = go.GetComponentInChildren<TextMeshProUGUI>();
+                    if (tmp != null) tmp.text = ActLabel(resolved);
+                }
+            }
+        }
+
+        private static Act ResolveAct(Act raw, bool canDouble, bool canSurrender)
+        {
+            if (raw == Act.R && !canSurrender) return Act.H;
+            if (raw == Act.D && !canDouble)    return Act.H;
+            return raw;
         }
 
         /// <summary>Removes the current highlighted cell overlay.</summary>
         public void ClearHighlight()
         {
-            if (_currentHighlight == null) return;
-            var hl = _currentHighlight.transform.Find("HL");
-            if (hl != null) Destroy(hl.gameObject);
-            _currentHighlight = null;
+            if (_currentHighlight != null)
+            {
+                var hl = _currentHighlight.transform.Find("HL");
+                if (hl != null) Destroy(hl.gameObject);
+                _currentHighlight = null;
+            }
+            if (_currentLabelHighlight != null)
+            {
+                var hl = _currentLabelHighlight.transform.Find("HL");
+                if (hl != null) Destroy(hl.gameObject);
+                _currentLabelHighlight = null;
+            }
         }
 
         // ── UI construction ───────────────────────────────────────────────────────
@@ -146,13 +203,13 @@ namespace Blackjack.UI
 
             float curY = Pad;
 
-            _softCells = BuildSection("SOFT TOTALS", SoftRows, curY, TableW);
+            _softCells = BuildSection("SOFT TOTALS", SoftRows, curY, TableW, out _softLabels, out _softActions);
             curY += SectionH(SoftRows.Length) + Border;
 
-            _hardCells = BuildSection("HARD TOTALS", HardRows, curY, TableW);
+            _hardCells = BuildSection("HARD TOTALS", HardRows, curY, TableW, out _hardLabels, out _hardActions);
             curY += SectionH(HardRows.Length) + Border;
 
-            _pairCells = BuildSection("PAIRS", PairRows, curY, TableW);
+            _pairCells = BuildSection("PAIRS", PairRows, curY, TableW, out _pairLabels, out _pairActions);
             curY += SectionH(PairRows.Length) + Pad;
 
             BuildLegend(curY, TableW);
@@ -176,9 +233,9 @@ namespace Blackjack.UI
             (Act.R, "Surrender", 82f),
         };
 
-        private const float LegendH       = 22f;
+        private const float LegendH       = 30f;
         private const float LegendSwatchW = 22f;
-        private const float LegendPadH    = 4f;
+        private const float LegendPadH    = 5f;
 
         private void BuildLegend(float topY, float availableW)
         {
@@ -221,7 +278,9 @@ namespace Blackjack.UI
 
         private GameObject[,] BuildSection(string title,
                                            (string label, Act[] cols)[] rows,
-                                           float topY, float rootInnerW)
+                                           float topY, float rootInnerW,
+                                           out GameObject[] labelCells,
+                                           out Act[,] actionData)
         {
             int   rowCount = rows.Length;
             float secH     = SectionH(rowCount);
@@ -284,6 +343,8 @@ namespace Blackjack.UI
 
             // ── Data rows ─────────────────────────────────────────────────────────
             var cells = new GameObject[rowCount, 10];
+            labelCells = new GameObject[rowCount];
+            actionData = new Act[rowCount, 10];
             for (int r = 0; r < rowCount; r++)
             {
                 var (lbl, acts) = rows[r];
@@ -293,6 +354,7 @@ namespace Blackjack.UI
                 AddLabel(lblCell, lbl, FontCell, FontStyles.Normal,
                          ColHeaderText, TextAlignmentOptions.MidlineLeft,
                          new RectOffset(3, 0, 0, 0));
+                labelCells[r] = lblCell;
 
                 for (int c = 0; c < acts.Length; c++)
                 {
@@ -301,7 +363,8 @@ namespace Blackjack.UI
                     cell.AddComponent<Image>().color = ActColor(acts[c]);
                     AddLabel(cell, ActLabel(acts[c]), FontCell, FontStyles.Bold,
                              ColCellText, TextAlignmentOptions.Center);
-                    cells[r, c] = cell;
+                    cells[r, c]      = cell;
+                    actionData[r, c] = acts[c];
                 }
 
                 rowY += RowH + Border;
@@ -312,8 +375,10 @@ namespace Blackjack.UI
 
         // ── Highlight helpers ─────────────────────────────────────────────────────
 
-        private GameObject FindCell(Hand hand, bool canSplit, int col)
+        private GameObject FindCell(Hand hand, bool canSplit, int col, out GameObject labelCell)
         {
+            labelCell = null;
+
             if (canSplit && hand.Count == 2)
             {
                 int v0 = hand.Cards[0].BlackjackValue;
@@ -324,7 +389,10 @@ namespace Blackjack.UI
                     int key = (v0 >= 10 && v0 != 11) ? 10 : Mathf.Min(v0, 11);
                     int row = PairRowIndex(key);
                     if (_pairCells != null && row >= 0 && row < _pairCells.GetLength(0))
+                    {
+                        labelCell = (_pairLabels != null && row < _pairLabels.Length) ? _pairLabels[row] : null;
                         return _pairCells[row, col];
+                    }
                 }
             }
 
@@ -332,19 +400,26 @@ namespace Blackjack.UI
             {
                 int row = Mathf.Clamp(hand.BestValue(), 13, 20) - 13;
                 if (_softCells != null && row < _softCells.GetLength(0))
+                {
+                    labelCell = (_softLabels != null && row < _softLabels.Length) ? _softLabels[row] : null;
                     return _softCells[row, col];
+                }
             }
 
             int hardRow = HardRowIndex(hand.BestValue());
             if (_hardCells != null && hardRow >= 0 && hardRow < _hardCells.GetLength(0))
+            {
+                labelCell = (_hardLabels != null && hardRow < _hardLabels.Length) ? _hardLabels[hardRow] : null;
                 return _hardCells[hardRow, col];
+            }
 
             return null;
         }
 
-        private void ShowHighlight(GameObject cell)
+        private void ShowHighlight(GameObject cell, bool isLabel = false)
         {
-            _currentHighlight = cell;
+            if (isLabel) _currentLabelHighlight = cell;
+            else         _currentHighlight      = cell;
 
             var hlGO = new GameObject("HL", typeof(RectTransform));
             hlGO.transform.SetParent(cell.transform, false);
@@ -355,7 +430,7 @@ namespace Blackjack.UI
             rt.anchorMax = Vector2.one;
             rt.offsetMin = new Vector2(-2f, -2f);
             rt.offsetMax = new Vector2(2f, 2f);
-            hlGO.AddComponent<Image>().color = Color.white;
+            hlGO.AddComponent<Image>().color = new Color(0.85f, 0.10f, 0.10f, 1f);
 
             var innerGO = new GameObject("HLInner", typeof(RectTransform));
             innerGO.transform.SetParent(hlGO.transform, false);
@@ -364,7 +439,7 @@ namespace Blackjack.UI
             irt.anchorMax = Vector2.one;
             irt.offsetMin = new Vector2(2f, 2f);
             irt.offsetMax = new Vector2(-2f, -2f);
-            innerGO.AddComponent<Image>().color = new Color(1f, 1f, 1f, 0.35f);
+            innerGO.AddComponent<Image>().color = new Color(0.85f, 0.10f, 0.10f, 0.35f);
         }
 
         // ── Row index mappers ─────────────────────────────────────────────────────

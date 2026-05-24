@@ -18,6 +18,7 @@ namespace Blackjack
         public bool alwaysLoseEnabled              = false;
         public float volume                        = 1f;
         public int  martingaleThreshold            = 4;
+        public bool martingaleActive               = true;
         public bool showStrategyEnabled            = true;
     }
 }

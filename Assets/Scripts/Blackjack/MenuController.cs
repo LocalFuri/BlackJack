@@ -30,6 +30,7 @@ namespace Blackjack
         [SerializeField] private Toggle overrideStrategyToggle;
         [SerializeField] private Toggle alwaysLoseToggle;
         [SerializeField] private Toggle showStrategyToggle;
+        [SerializeField] private Toggle martingaleActiveToggle;
 
         [Header("Volume")]
         [SerializeField] private Slider volumeSlider;
@@ -79,6 +80,7 @@ namespace Blackjack
             overrideStrategyToggle?.onValueChanged.AddListener(OnOverrideStrategyToggled);
             alwaysLoseToggle?.onValueChanged.AddListener(OnAlwaysLoseToggled);
             showStrategyToggle?.onValueChanged.AddListener(OnShowStrategyToggled);
+            martingaleActiveToggle?.onValueChanged.AddListener(OnMartingaleActiveToggled);
             volumeSlider?.onValueChanged.AddListener(OnVolumeChanged);
             martingaleThresholdSlider?.onValueChanged.AddListener(OnMartingaleThresholdChanged);
             testSplitRankSlider?.onValueChanged.AddListener(OnTestSplitRankChanged);
@@ -86,7 +88,7 @@ namespace Blackjack
             // Play toggle sound whenever any checkbox is turned on.
             foreach (var toggle in new[] { blackjackTestToggle, bjAllToggle, ddTestToggle,
                                            testSplitToggle, overrideStrategyToggle,
-                                           alwaysLoseToggle, showStrategyToggle })
+                                           alwaysLoseToggle, showStrategyToggle, martingaleActiveToggle })
             {
                 if (toggle != null)
                     toggle.onValueChanged.AddListener(OnToggleSoundPlay);
@@ -191,6 +193,22 @@ namespace Blackjack
             alwaysLoseToggle?.SetIsOnWithoutNotify(false);
         }
 
+        /// <summary>
+        /// Enables or disables the Override Strategy checkbox.
+        /// Call with <c>false</c> when entering Martingale mode, <c>true</c> when leaving it.
+        /// </summary>
+        public void SetOverrideStrategyInteractable(bool interactable)
+        {
+            if (overrideStrategyToggle == null) return;
+            overrideStrategyToggle.interactable = interactable;
+            if (!interactable)
+            {
+                overrideStrategyToggle.SetIsOnWithoutNotify(false);
+                _settings.overrideStrategyEnabled = false;
+                SettingsRepository.Save(_settings);
+            }
+        }
+
         private void OnVolumeChanged(float linear)
         {
             if (audioMixer != null)
@@ -201,6 +219,12 @@ namespace Blackjack
         }
 
         private void OnMartingaleThresholdToggled(bool value) { }
+
+        private void OnMartingaleActiveToggled(bool value)
+        {
+            _settings.martingaleActive = value;
+            SettingsRepository.Save(_settings);
+        }
 
         private void OnShowStrategyToggled(bool value)
         {
@@ -242,6 +266,21 @@ namespace Blackjack
         /// <summary>Returns the Martingale streak threshold from the menu slider.</summary>
         public int MartingaleThreshold => _settings.martingaleThreshold;
 
+        /// <summary>When true, the Martingale suggestion popup is enabled.</summary>
+        public bool IsMartingaleActive => _settings.martingaleActive;
+
+        /// <summary>
+        /// Programmatically activates the "Martingale is Active" checkbox.
+        /// Used when the threshold is exceeded and the popup is about to be shown.
+        /// </summary>
+        public void ActivateMartingale()
+        {
+            if (_settings.martingaleActive) return;
+            _settings.martingaleActive = true;
+            SettingsRepository.Save(_settings);
+            martingaleActiveToggle?.SetIsOnWithoutNotify(true);
+        }
+
         /// <summary>When true, the strategy table should be visible to the player.</summary>
         public bool IsShowStrategyEnabled => _settings.showStrategyEnabled;
 
@@ -258,12 +297,13 @@ namespace Blackjack
         }
 
         /// <summary>Closes the menu panel if it is currently open.</summary>
-        public void CloseMenu()
+        /// <param name="playSound">When false, suppresses the close sound. Defaults to true.</param>
+        public void CloseMenu(bool playSound = true)
         {
             if (menuPanel != null && menuPanel.activeSelf)
             {
                 menuPanel.SetActive(false);
-                blackjackGame?.PlayCloseSound();
+                if (playSound) blackjackGame?.PlayCloseSound();
             }
         }
 
@@ -306,6 +346,9 @@ namespace Blackjack
 
             if (martingaleThresholdSlider != null)
                 martingaleThresholdSlider.SetValueWithoutNotify(_settings.martingaleThreshold);
+
+            if (martingaleActiveToggle != null)
+                martingaleActiveToggle.SetIsOnWithoutNotify(_settings.martingaleActive);
 
             if (testSplitRankSlider != null)
                 testSplitRankSlider.SetValueWithoutNotify(_settings.testSplitRank);

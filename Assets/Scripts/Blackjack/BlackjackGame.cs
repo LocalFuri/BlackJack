@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+
 using UnityEngine.UI;
 using TMPro;
 
@@ -95,6 +96,7 @@ namespace Blackjack
 
     private SoundEntry? _lastDoubleBJSound;
     private bool _doubleBJSoundPlaying;
+    private float _fireworksEndTime;
 
         [Header("Timing")]
 
@@ -164,8 +166,6 @@ namespace Blackjack
         private bool _martingalePopupShown;
         // True when the player is in active Martingale mode and lost the last round — bet should be doubled on next betting screen.
         private bool _pendingMartingaleDouble;
-        // Tracks the current Martingale chip addition: smallest chip on first confirm, doubled after each loss.
-        private int _martingaleChipValue;
 
         // Running score: +1 per win, -1 per loss, 0 for push or surrender.
         private int _playerScore;
@@ -200,7 +200,8 @@ namespace Blackjack
         public bool IsMenuOpen => menuController != null && menuController.IsMenuOpen;
 
         /// <summary>Closes the menu panel. Used by <see cref="ChipBetting"/> when a bet action is taken during the betting phase.</summary>
-        public void CloseMenu() => menuController?.CloseMenu();
+        /// <param name="playSound">When false, suppresses the close sound. Defaults to true.</param>
+        public void CloseMenu(bool playSound = true) => menuController?.CloseMenu(playSound);
 
         /// <summary>When true, the player always loses the round regardless of card values. Used for Martingale testing.</summary>
         public bool AlwaysLose { get; set; }
@@ -253,8 +254,10 @@ namespace Blackjack
             _martingaleWin            = false;
             _martingalePopupShown     = false;
             _pendingMartingaleDouble  = false;
-            _martingaleChipValue      = 0;
             RefreshStreakLabel();
+
+            // Restore the Override Strategy option in case Martingale mode was active.
+            menuController?.SetOverrideStrategyInteractable(true);
 
             StopAllScorePulses();
             ResetPlayerScoreLabelPosition();
@@ -437,6 +440,15 @@ namespace Blackjack
                 && consecutiveTrigger
                 && !_martingalePopupShown)
             {
+                // Auto-activate the "Martingale is Active" checkbox when the threshold fires.
+                menuController?.ActivateMartingale();
+
+                if (!menuController?.IsMartingaleActive ?? false)
+                {
+                    StartNewRound();
+                    return;
+                }
+
                 _martingalePopupShown = true;
                 martingalePopup.Show(
                     "Play Martingale ?",
@@ -454,12 +466,13 @@ namespace Blackjack
                             // Snapshot the bet placed before Martingale so we can restore it on a win.
                             _betBeforeMartingale = chipBetting.TotalBet;
 
-                            // First entry into Martingale: bet abs(total amount lost) + 1 chip.
-                            int chipValue = chipBetting.SmallestChipValue;
-                            int nextBet   = (int)_totalAmountLost + chipValue;
+                            // Set bet to total amount lost so far plus one chip.
+                            int nextBet = (int)_totalAmountLost + chipBetting.SmallestChipValue;
                             chipBetting.SetBet(nextBet, playSound: true);
-                            _martingaleChipValue = chipValue;
                         }
+
+                        // Disable the Override Strategy option while in Martingale mode.
+                        menuController?.SetOverrideStrategyInteractable(false);
                         RefreshStreakLabel();
                         StartNewRound();
                     },
@@ -884,6 +897,10 @@ namespace Blackjack
             yield return StartCoroutine(DealCardTo(ActiveHand, ActiveViews, area, faceUp: true));
             UpdateScoreLabels(revealDealer: false);
 
+            strategyTableUI?.HighlightRecommendation(
+                ActiveHand, _dealerUpcardSnapshot,
+                canSplit: false, canDouble: CanDoubleDown(), canSurrender: CanSurrender());
+
             int score = ActiveHand.BestValue();
 
             if (score > BlackjackValue)
@@ -1065,12 +1082,10 @@ namespace Blackjack
                 _consecutiveLosses++;
                 _totalLosses++;
                 _totalAmountLost += lostAmount;
-                // If the player is already in Martingale mode, schedule a bet double for the next betting phase
-                // and reflect the upcoming doubled chip value immediately in the streak label.
+                // If the player is already in Martingale mode, schedule a bet double for the next betting phase.
                 if (_martingalePopupShown)
                 {
                     _pendingMartingaleDouble = true;
-                    _martingaleChipValue    *= 2;
                 }
             }
             else if (isPush)
@@ -1085,9 +1100,10 @@ namespace Blackjack
                     _martingaleWin = true;
 
                 _consecutiveLosses       = 0;
+                _totalAmountLost         = 0;
+                _totalLosses             = 0;
                 _martingalePopupShown    = false;
                 _pendingMartingaleDouble = false;
-                _martingaleChipValue     = 0;
             }
             RefreshStreakLabel();
         }
@@ -1202,6 +1218,24 @@ namespace Blackjack
             chipBetting?.ResetMaxBet();
             chipBetting?.ClampBetToMaxBet();
             chipBetting?.RestoreBetFromSnapshot();
+
+            // If fireworks are still playing, wait for them to finish before
+            // letting the player interact again.
+            float remaining = _fireworksEndTime - Time.time;
+            if (remaining > 0f)
+                yield return new WaitForSeconds(remaining);
+
+            // Restore the pre-Martingale bet on a Martingale win, regardless of win type.
+            if (_martingaleWin && chipBetting != null)
+            {
+                int restoreBet = _betBeforeMartingale > 0 ? _betBeforeMartingale : chipBetting.SmallestChipValue;
+                chipBetting.SetBet(restoreBet);
+                chipBetting.SnapshotBet();
+                _betBeforeMartingale = 0;
+                _martingaleWin       = false;
+                menuController?.SetOverrideStrategyInteractable(true);
+            }
+
             if (!_doubleBJSoundPlaying && _state == GameState.RoundOver)
                 SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
             // State stays RoundOver — chip click or Deal press drives the next transition.
@@ -1485,8 +1519,7 @@ namespace Blackjack
             }
         }
 
-        /// <summary>Waits for <paramref name="delay"/> seconds, then plays <see cref="resetSound"/>.
-        /// If the round was a Martingale win, also replaces the bet area chips with the minimum bet.</summary>
+        /// <summary>Waits for <paramref name="delay"/> seconds, then plays <see cref="resetSound"/>.</summary>
         private IEnumerator PlayResetSoundAfterDelay(float delay)
         {
             // Always yield at least one frame so RecordRoundOutcome can set _martingaleWin before we read it.
@@ -1496,15 +1529,6 @@ namespace Blackjack
                 yield return null;
 
             resetSound.Play(audioSource);
-
-            if (_martingaleWin && chipBetting != null)
-            {
-                int restoreBet = _betBeforeMartingale > 0 ? _betBeforeMartingale : chipBetting.SmallestChipValue;
-                chipBetting.SetBet(restoreBet);
-                chipBetting.SnapshotBet();
-                _betBeforeMartingale = 0;
-                _martingaleWin       = false;
-            }
         }
 
         /// <summary>
@@ -1530,7 +1554,9 @@ namespace Blackjack
                 spawnPosition = playerCardArea.position;
             }
             GameObject fx = Instantiate(fireworksPrefab, spawnPosition, Quaternion.identity);
-            Destroy(fx, duration > 0f ? duration : fireworksDuration);
+            float actualDuration = duration > 0f ? duration : fireworksDuration;
+            Destroy(fx, actualDuration);
+            _fireworksEndTime = Time.time + actualDuration;
         }
 
         /// <summary>Plays the natural blackjack sound if assigned, otherwise falls back to win sound.
