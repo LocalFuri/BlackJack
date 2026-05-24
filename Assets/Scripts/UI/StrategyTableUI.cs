@@ -55,14 +55,14 @@ namespace Blackjack.UI
         // ── Strategy data (Dealer cols: 2 3 4 5 6 7 8 9 10 A) ────────────────────
         private static readonly (string label, Act[] cols)[] SoftRows =
         {
-            ("A,2 (Soft 13)", new[]{ Act.H, Act.H, Act.H, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
-            ("A,3 (Soft 14)", new[]{ Act.H, Act.H, Act.H, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
-            ("A,4 (Soft 15)", new[]{ Act.H, Act.H, Act.D, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
-            ("A,5 (Soft 16)", new[]{ Act.H, Act.H, Act.D, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
-            ("A,6 (Soft 17)", new[]{ Act.H, Act.D, Act.D, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
-            ("A,7 (Soft 18)", new[]{ Act.D, Act.D, Act.D, Act.D, Act.D, Act.S, Act.S, Act.H, Act.H, Act.H }),
-            ("A,8 (Soft 19)", new[]{ Act.S, Act.S, Act.S, Act.S, Act.D, Act.S, Act.S, Act.S, Act.S, Act.S }),
             ("A,9 (Soft 20)", new[]{ Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S, Act.S }),
+            ("A,8 (Soft 19)", new[]{ Act.S, Act.S, Act.S, Act.S, Act.D, Act.S, Act.S, Act.S, Act.S, Act.S }),
+            ("A,7 (Soft 18)", new[]{ Act.D, Act.D, Act.D, Act.D, Act.D, Act.S, Act.S, Act.H, Act.H, Act.H }),
+            ("A,6 (Soft 17)", new[]{ Act.H, Act.D, Act.D, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
+            ("A,5 (Soft 16)", new[]{ Act.H, Act.H, Act.D, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
+            ("A,4 (Soft 15)", new[]{ Act.H, Act.H, Act.D, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
+            ("A,3 (Soft 14)", new[]{ Act.H, Act.H, Act.H, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
+            ("A,2 (Soft 13)", new[]{ Act.H, Act.H, Act.H, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
         };
 
         private static readonly (string label, Act[] cols)[] HardRows =
@@ -398,8 +398,8 @@ namespace Blackjack.UI
 
             if (hand.IsSoft())
             {
-                int row = Mathf.Clamp(hand.BestValue(), 13, 20) - 13;
-                if (_softCells != null && row < _softCells.GetLength(0))
+                int row = (SoftRows.Length - 1) - (Mathf.Clamp(hand.BestValue(), 13, 20) - 13);
+                if (_softCells != null && row >= 0 && row < _softCells.GetLength(0))
                 {
                     labelCell = (_softLabels != null && row < _softLabels.Length) ? _softLabels[row] : null;
                     return _softCells[row, col];

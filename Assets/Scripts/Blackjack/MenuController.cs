@@ -194,6 +194,23 @@ namespace Blackjack
         }
 
         /// <summary>
+        /// Disables the "Always Lose" checkbox.
+        /// Called whenever a test button in the TestButtonColumn is pressed.
+        /// </summary>
+        public void DisableTestCheckboxes()
+        {
+            // Always Lose
+            if (_settings.alwaysLoseEnabled)
+            {
+                _settings.alwaysLoseEnabled = false;
+                SettingsRepository.Save(_settings);
+                alwaysLoseToggle?.SetIsOnWithoutNotify(false);
+                if (blackjackGame != null)
+                    blackjackGame.AlwaysLose = false;
+            }
+        }
+
+        /// <summary>
         /// Enables or disables the Override Strategy checkbox.
         /// Call with <c>false</c> when entering Martingale mode, <c>true</c> when leaving it.
         /// </summary>
@@ -224,6 +241,9 @@ namespace Blackjack
         {
             _settings.martingaleActive = value;
             SettingsRepository.Save(_settings);
+
+            if (value)
+                blackjackGame?.TryStartMartingaleFromToggle();
         }
 
         private void OnShowStrategyToggled(bool value)
@@ -281,6 +301,18 @@ namespace Blackjack
             martingaleActiveToggle?.SetIsOnWithoutNotify(true);
         }
 
+        /// <summary>
+        /// Programmatically deactivates the "Martingale is Active" checkbox.
+        /// Used when the player declines the Martingale popup.
+        /// </summary>
+        public void DeactivateMartingale()
+        {
+            if (!_settings.martingaleActive) return;
+            _settings.martingaleActive = false;
+            SettingsRepository.Save(_settings);
+            martingaleActiveToggle?.SetIsOnWithoutNotify(false);
+        }
+
         /// <summary>When true, the strategy table should be visible to the player.</summary>
         public bool IsShowStrategyEnabled => _settings.showStrategyEnabled;
 
@@ -292,6 +324,11 @@ namespace Blackjack
         {
             if (menuPanel == null) return;
             bool closing = menuPanel.activeSelf;
+
+            // Only allow opening when no round is in progress.
+            if (!closing && blackjackGame != null && !blackjackGame.IsBettingAllowed && !blackjackGame.IsRoundOver)
+                return;
+
             menuPanel.SetActive(!closing);
             if (closing) blackjackGame?.PlayCloseSound();
         }

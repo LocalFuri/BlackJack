@@ -148,7 +148,7 @@ namespace Blackjack
 
         private int _doubleDownExtraBet; // extra bet deducted when doubling down
         private int _savedBetBeforeAction; // bet amount before split/double-down, restored next round
-        private int _betBeforeMartingale;  // bet the player had before entering Martingale mode, restored on win
+        private int _betBeforeMartingale;  // snapshot of bet before Martingale (kept for reference; win always resets to minimum)
 
         // Snapshot of the dealer's visible upcard taken at the start of the player's turn.
         private CardData _dealerUpcardSnapshot;
@@ -166,6 +166,8 @@ namespace Blackjack
         private bool _martingalePopupShown;
         // True when the player is in active Martingale mode and lost the last round — bet should be doubled on next betting screen.
         private bool _pendingMartingaleDouble;
+        // True after the player explicitly declines the Martingale popup. Suppresses re-prompting on Deal until the streak resets.
+        private bool _martingaleDeclined;
 
         // Running score: +1 per win, -1 per loss, 0 for push or surrender.
         private int _playerScore;
@@ -205,6 +207,40 @@ namespace Blackjack
 
         /// <summary>When true, the player always loses the round regardless of card values. Used for Martingale testing.</summary>
         public bool AlwaysLose { get; set; }
+
+        /// <summary>
+        /// Called when the player manually enables the "Martingale is Active" checkbox.
+        /// If the game is in the betting/round-over phase, there is an active loss streak,
+        /// and the configured threshold is greater than or equal to the current streak count,
+        /// immediately applies the Martingale bet, closes the menu, and starts the next round.
+        /// </summary>
+        public void TryStartMartingaleFromToggle()
+        {
+            if (!IsBettingAllowed && !IsRoundOver) return;
+            if (_martingalePopupShown) return;
+            if (_consecutiveLosses <= 0) return;
+
+            bool thresholdCoversStreak = EffectiveMartingaleThreshold > 0 && EffectiveMartingaleThreshold >= _consecutiveLosses;
+            if (!thresholdCoversStreak) return;
+
+            _martingalePopupShown = true;
+
+            if (AlwaysLose)
+            {
+                AlwaysLose = false;
+                OnAlwaysLoseDisabled?.Invoke();
+            }
+
+            if (chipBetting != null)
+            {
+                _betBeforeMartingale = chipBetting.TotalBet;
+                int nextBet = (int)_totalAmountLost + chipBetting.SmallestChipValue;
+                chipBetting.SetBet(nextBet, playSound: true);
+            }
+
+            RefreshStreakLabel();
+            StartNewRound();
+        }
 
         /// <summary>Fired when the game automatically disables "Always Lose" upon entering Martingale mode.</summary>
         public event System.Action OnAlwaysLoseDisabled;
@@ -257,7 +293,6 @@ namespace Blackjack
             RefreshStreakLabel();
 
             // Restore the Override Strategy option in case Martingale mode was active.
-            menuController?.SetOverrideStrategyInteractable(true);
 
             StopAllScorePulses();
             ResetPlayerScoreLabelPosition();
@@ -438,17 +473,10 @@ namespace Blackjack
 
             if (martingalePopup != null
                 && consecutiveTrigger
-                && !_martingalePopupShown)
+                && !_martingalePopupShown
+                && !_martingaleDeclined
+                && (menuController?.IsMartingaleActive ?? false))
             {
-                // Auto-activate the "Martingale is Active" checkbox when the threshold fires.
-                menuController?.ActivateMartingale();
-
-                if (!menuController?.IsMartingaleActive ?? false)
-                {
-                    StartNewRound();
-                    return;
-                }
-
                 _martingalePopupShown = true;
                 martingalePopup.Show(
                     "Play Martingale ?",
@@ -472,11 +500,15 @@ namespace Blackjack
                         }
 
                         // Disable the Override Strategy option while in Martingale mode.
-                        menuController?.SetOverrideStrategyInteractable(false);
                         RefreshStreakLabel();
                         StartNewRound();
                     },
-                    onReconsider: () => { /* player stays on betting screen */ }
+                    onReconsider: () =>
+                    {
+                        _martingalePopupShown = false;
+                        _martingaleDeclined   = true;
+                        menuController?.DeactivateMartingale();
+                    }
                 );
                 return;
             }
@@ -624,6 +656,7 @@ namespace Blackjack
         {
             if (_state != GameState.Idle && _state != GameState.RoundOver) return;
             StopBlackjackCelebration();
+            DeactivateTestCheckboxes();
             _state = GameState.Idle;
             _forcePlayerBlackjack = true;
             StartNewRound();
@@ -634,6 +667,7 @@ namespace Blackjack
         {
             if (_state != GameState.Idle && _state != GameState.RoundOver) return;
             StopBlackjackCelebration();
+            DeactivateTestCheckboxes();
             _state = GameState.Idle;
             _forceSplitHand = true;
             StartNewRound();
@@ -644,6 +678,7 @@ namespace Blackjack
         {
             if (_state != GameState.Idle && _state != GameState.RoundOver) return;
             StopBlackjackCelebration();
+            DeactivateTestCheckboxes();
             _state = GameState.Idle;
             _forceBothBlackjack = true;
             StartNewRound();
@@ -654,10 +689,14 @@ namespace Blackjack
         {
             if (_state != GameState.Idle && _state != GameState.RoundOver) return;
             StopBlackjackCelebration();
+            DeactivateTestCheckboxes();
             _state = GameState.Idle;
             _forceDoubleDownTest = true;
             StartNewRound();
         }
+
+        /// <summary>Turns off "Always Lose" and "Override Strategy Popup" before any test-button round.</summary>
+        private void DeactivateTestCheckboxes() => menuController?.DisableTestCheckboxes();
 
         // ──────────────────────────────────────────────────────────────────────────
         // Round Flow
@@ -705,8 +744,43 @@ namespace Blackjack
                 yield return StartCoroutine(RevealHoleCard());
                 UpdateScoreLabels(revealDealer: true);
 
-                if (playerBJ && dealerBJ)  { StartCoroutine(PlayDoubleBJSoundRoutine()); RecordRoundOutcome(false, scoreDelta:  0, isPush: true); SetStatus("Push", PushColor); ApplyPayout(PayoutResult.Push, CurrentBet); }
-                else if (playerBJ)         { ApplyBlackjackGlow(); SpawnFireworks(PlayNaturalBlackjackSound()); RecordRoundOutcome(false, scoreDelta: +1); SetStatus("You win", WinColor); ApplyPayout(PayoutResult.BlackjackWin, CurrentBet); }
+                if (playerBJ && dealerBJ)
+                {
+                    if (AlwaysLose)
+                    {
+                        // Always Lose: treat double-BJ push as a loss.
+                        PlayLoseSound();
+                        RecordRoundOutcome(true, lostAmount: CurrentBet, scoreDelta: -1);
+                        SetStatus("You lose", LoseColor);
+                        ApplyPayout(PayoutResult.Lose, CurrentBet);
+                    }
+                    else
+                    {
+                        StartCoroutine(PlayDoubleBJSoundRoutine());
+                        RecordRoundOutcome(false, scoreDelta: 0, isPush: true);
+                        SetStatus("Push", PushColor);
+                        ApplyPayout(PayoutResult.Push, CurrentBet);
+                    }
+                }
+                else if (playerBJ)
+                {
+                    if (AlwaysLose)
+                    {
+                        // Always Lose: treat a natural blackjack as a loss.
+                        PlayLoseSound();
+                        RecordRoundOutcome(true, lostAmount: CurrentBet, scoreDelta: -1);
+                        SetStatus("You lose", LoseColor);
+                        ApplyPayout(PayoutResult.Lose, CurrentBet);
+                    }
+                    else
+                    {
+                        ApplyBlackjackGlow();
+                        SpawnFireworks(PlayNaturalBlackjackSound());
+                        RecordRoundOutcome(false, scoreDelta: +1);
+                        SetStatus("You win", WinColor);
+                        ApplyPayout(PayoutResult.BlackjackWin, CurrentBet);
+                    }
+                }
                 else                       { PlayLoseSound(); RecordRoundOutcome(true, lostAmount: CurrentBet, scoreDelta: -1); SetStatus("You lose", LoseColor); ApplyPayout(PayoutResult.Lose, CurrentBet); }
 
                 yield return StartCoroutine(EndRound());
@@ -1103,6 +1177,7 @@ namespace Blackjack
                 _totalAmountLost         = 0;
                 _totalLosses             = 0;
                 _martingalePopupShown    = false;
+                _martingaleDeclined      = false;
                 _pendingMartingaleDouble = false;
             }
             RefreshStreakLabel();
@@ -1175,9 +1250,20 @@ namespace Blackjack
                     }
                     else
                     {
-                        results.Add(ColorizeText($"{labels[i]}: Push", PushColor));
-                        anyPush = true;
-                        ApplyPayout(PayoutResult.Push, handBet);
+                        if (AlwaysLose)
+                        {
+                            // Always Lose: treat per-hand push as a loss.
+                            results.Add(ColorizeText($"{labels[i]}: Lose", LoseColor));
+                            anyLoss = true;
+                            splitLostAmount += handBet;
+                            ApplyPayout(PayoutResult.Lose, handBet);
+                        }
+                        else
+                        {
+                            results.Add(ColorizeText($"{labels[i]}: Push", PushColor));
+                            anyPush = true;
+                            ApplyPayout(PayoutResult.Push, handBet);
+                        }
                     }
                 }
 
@@ -1203,7 +1289,24 @@ namespace Blackjack
                 if      (dealerBust)         { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); SetStatus($"You win", WinColor);  ApplyPayout(PayoutResult.Win,  totalBet); }
                 else if (p > dealerScore)    { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); SetStatus($"You win", WinColor);  ApplyPayout(PayoutResult.Win,  totalBet); }
                 else if (dealerScore > p)    { PlayLoseSound(); RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1);  SetStatus($"You lose",LoseColor); ApplyPayout(PayoutResult.Lose, totalBet); }
-                else                         { PlayTieSound();  RecordRoundOutcome(false, scoreDelta:  0, isPush: true); SetStatus($"Push",PushColor);     ApplyPayout(PayoutResult.Push, totalBet); }
+                else
+                {
+                    if (AlwaysLose)
+                    {
+                        // Always Lose: treat push as a loss.
+                        PlayLoseSound();
+                        RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1);
+                        SetStatus("You lose", LoseColor);
+                        ApplyPayout(PayoutResult.Lose, totalBet);
+                    }
+                    else
+                    {
+                        PlayTieSound();
+                        RecordRoundOutcome(false, scoreDelta: 0, isPush: true);
+                        SetStatus("Push", PushColor);
+                        ApplyPayout(PayoutResult.Push, totalBet);
+                    }
+                }
             }
 
             yield return StartCoroutine(EndRound());
@@ -1225,15 +1328,13 @@ namespace Blackjack
             if (remaining > 0f)
                 yield return new WaitForSeconds(remaining);
 
-            // Restore the pre-Martingale bet on a Martingale win, regardless of win type.
+            // Reset to minimum bet on a Martingale win.
             if (_martingaleWin && chipBetting != null)
             {
-                int restoreBet = _betBeforeMartingale > 0 ? _betBeforeMartingale : chipBetting.SmallestChipValue;
-                chipBetting.SetBet(restoreBet);
+                chipBetting.SetBet(chipBetting.SmallestChipValue);
                 chipBetting.SnapshotBet();
                 _betBeforeMartingale = 0;
                 _martingaleWin       = false;
-                menuController?.SetOverrideStrategyInteractable(true);
             }
 
             if (!_doubleBJSoundPlaying && _state == GameState.RoundOver)

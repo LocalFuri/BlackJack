@@ -15,7 +15,7 @@ namespace Blackjack
         public Key dealOrHitKey = Key.Space;
 
         [Header("Menu")]
-        [Tooltip("Open / close the developer menu panel.")]
+        [Tooltip("Open / close the developer menu panel. Responds to F1, F2, or F5.")]
         public Key toggleMenuKey = Key.F2;
 
         [Header("Application")]
@@ -29,10 +29,12 @@ namespace Blackjack
             Keyboard.current != null &&
             Keyboard.current[dealOrHitKey].wasPressedThisFrame;
 
-        /// <summary>Returns true if the menu toggle key was pressed this frame.</summary>
+        /// <summary>Returns true if any menu toggle key (F1, F2, or F5) was pressed this frame.</summary>
         public bool ToggleMenuPressed =>
             Keyboard.current != null &&
-            Keyboard.current[toggleMenuKey].wasPressedThisFrame;
+            (Keyboard.current[Key.F1].wasPressedThisFrame ||
+             Keyboard.current[Key.F2].wasPressedThisFrame ||
+             Keyboard.current[Key.F5].wasPressedThisFrame);
 
         /// <summary>Returns true if the quit key was pressed this frame.</summary>
         public bool QuitPressed =>
