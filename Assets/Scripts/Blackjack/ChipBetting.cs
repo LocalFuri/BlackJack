@@ -67,9 +67,9 @@ namespace Blackjack
 
         [Header("Limits")]
         [Tooltip("Maximum total bet the player is allowed to place.")]
-        [SerializeField] private int maxBet = 1000;
+        [SerializeField] private int maxBet = BlackjackGame.BetLimit;
 
-        private const int DefaultMaxBet = 1000;
+        private const int DefaultMaxBet = BlackjackGame.BetLimit;
 
         [Header("Buttons")]
         [Tooltip("Button that resets the bet to the minimum (one lowest-denomination chip).")]
@@ -168,6 +168,9 @@ namespace Blackjack
 
         /// <summary>Resets the maximum bet back to the default value of <see cref="DefaultMaxBet"/>.</summary>
         public void ResetMaxBet() => maxBet = DefaultMaxBet;
+
+        /// <summary>Overrides the maximum bet to <paramref name="value"/>. Used by Martingale mode to lift the cap.</summary>
+        public void SetMaxBet(int value) => maxBet = Mathf.Max(value, DefaultMaxBet);
 
         /// <summary>
         /// Removes chips from the bet area — highest denomination first — until

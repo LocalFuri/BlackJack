@@ -302,6 +302,18 @@ namespace Blackjack
         }
 
         /// <summary>
+        /// Deactivates the "Override Strategy" checkbox.
+        /// Called whenever the game enters Martingale mode.
+        /// </summary>
+        public void DisableOverrideStrategy()
+        {
+            if (!_settings.overrideStrategyEnabled) return;
+            _settings.overrideStrategyEnabled = false;
+            SettingsRepository.Save(_settings);
+            overrideStrategyToggle?.SetIsOnWithoutNotify(false);
+        }
+
+        /// <summary>
         /// Programmatically deactivates the "Martingale is Active" checkbox.
         /// Used when the player declines the Martingale popup.
         /// </summary>

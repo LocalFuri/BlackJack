@@ -1,3 +1,4 @@
+//CodeRed Soft 2026-05-244
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -118,6 +119,7 @@ namespace Blackjack
         private const int AutoHitMaxScore    = 0; //disable
         private const int DealerSoft17       = 17;
         private const int BlackjackValue     = 21;
+        public  const int BetLimit           = 1000;
 
         private static readonly Color WinStatusColor = new Color(1f, 0f, 0f, 1f);        //gold
         private static readonly Color WinColor = new Color(0f, 1f, 0f, 1f);              //green
@@ -234,10 +236,12 @@ namespace Blackjack
             if (chipBetting != null)
             {
                 _betBeforeMartingale = chipBetting.TotalBet;
-                int nextBet = (int)_totalAmountLost + chipBetting.SmallestChipValue;
+                int nextBet = (int)Math.Abs(_playerMoney) + chipBetting.SmallestChipValue;
+                chipBetting.SetMaxBet(nextBet);
                 chipBetting.SetBet(nextBet, playSound: true);
             }
 
+            menuController?.DisableOverrideStrategy();
             RefreshStreakLabel();
             StartNewRound();
         }
@@ -408,40 +412,16 @@ namespace Blackjack
         }
 
         /// <summary>
-        /// Plays the knock sound and pulses "Limit exceeded!" in LoseColor 3 times,
-        /// then restores the previous status label text and color.
+        /// Sets the status label to "Limit Exceeded" in LoseColor and plays the knock sound.
         /// </summary>
         public void NotifyBetLimitExceeded()
         {
             knockSound.Play(audioSource);
-            StartCoroutine(PulseLimitExceeded());
+            SetStatus("Limit Exceeded", LoseColor);
         }
-
-        private const int LimitPulseCount = 3;
-        private const float LimitPulseDelay = 0.5f;
 
         /// <summary>True while the "Limit exceeded!" pulse animation is running. All input should be suppressed during this window.</summary>
         public bool IsLimitPulsing { get; private set; }
-
-        private IEnumerator PulseLimitExceeded()
-        {
-            IsLimitPulsing = true;
-
-            string previousText  = statusLabel.text;
-            Color  previousColor = statusLabel.color;
-
-            for (int i = 0; i < LimitPulseCount; i++)
-            {
-                SetStatus("Limit exceeded!", LoseColor);
-                yield return new WaitForSeconds(LimitPulseDelay);
-                SetStatus(string.Empty, LoseColor);
-                yield return new WaitForSeconds(LimitPulseDelay);
-            }
-
-            SetStatus(previousText, previousColor);
-
-            IsLimitPulsing = false;
-        }
 
         // ──────────────────────────────────────────────────────────────────────────
         // Input
@@ -494,12 +474,15 @@ namespace Blackjack
                             // Snapshot the bet placed before Martingale so we can restore it on a win.
                             _betBeforeMartingale = chipBetting.TotalBet;
 
-                            // Set bet to total amount lost so far plus one chip.
-                            int nextBet = (int)_totalAmountLost + chipBetting.SmallestChipValue;
+                            // Set bet to absolute player money loss so far plus one chip.
+                            int nextBet = (int)Math.Abs(_playerMoney) + chipBetting.SmallestChipValue;
+                            chipBetting.SetMaxBet(nextBet);
                             chipBetting.SetBet(nextBet, playSound: true);
                         }
 
                         // Disable the Override Strategy option while in Martingale mode.
+                        menuController?.DisableOverrideStrategy();
+                        SetStatus("Limit Exceeded", LoseColor);
                         RefreshStreakLabel();
                         StartNewRound();
                     },
@@ -695,7 +678,7 @@ namespace Blackjack
             StartNewRound();
         }
 
-        /// <summary>Turns off "Always Lose" and "Override Strategy Popup" before any test-button round.</summary>
+        /// <summary>Turns off "Always Lose" and "Override Strategy" before any test-button round.</summary>
         private void DeactivateTestCheckboxes() => menuController?.DisableTestCheckboxes();
 
         // ──────────────────────────────────────────────────────────────────────────
