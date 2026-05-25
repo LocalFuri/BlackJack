@@ -31,6 +31,7 @@ namespace Blackjack
         [SerializeField] private Toggle alwaysLoseToggle;
         [SerializeField] private Toggle showStrategyToggle;
         [SerializeField] private Toggle martingaleActiveToggle;
+        [SerializeField] private Toggle martingaleAutoPlayToggle;
 
         [Header("Volume")]
         [SerializeField] private Slider volumeSlider;
@@ -38,6 +39,8 @@ namespace Blackjack
 
         [Header("Martingale Threshold")]
         [SerializeField] private Slider martingaleThresholdSlider;
+        [Tooltip("Starting Martingale loss-streak threshold. Overrides the persisted value every time the scene loads.")]
+        [SerializeField] [Min(1)] private int defaultMartingaleThreshold = 4;
 
         [Header("Test Split Rank")]
         [SerializeField] private Slider testSplitRankSlider;
@@ -70,6 +73,9 @@ namespace Blackjack
 
             _settings = SettingsRepository.Load();
 
+            // Always start from the Inspector-configured default so the designer controls the threshold.
+            _settings.martingaleThreshold = defaultMartingaleThreshold;
+
             ApplySettings();
 
             // Register callbacks after applying so initial apply does not trigger saves.
@@ -81,6 +87,7 @@ namespace Blackjack
             alwaysLoseToggle?.onValueChanged.AddListener(OnAlwaysLoseToggled);
             showStrategyToggle?.onValueChanged.AddListener(OnShowStrategyToggled);
             martingaleActiveToggle?.onValueChanged.AddListener(OnMartingaleActiveToggled);
+            martingaleAutoPlayToggle?.onValueChanged.AddListener(OnMartingaleAutoPlayToggled);
             volumeSlider?.onValueChanged.AddListener(OnVolumeChanged);
             martingaleThresholdSlider?.onValueChanged.AddListener(OnMartingaleThresholdChanged);
             testSplitRankSlider?.onValueChanged.AddListener(OnTestSplitRankChanged);
@@ -88,7 +95,8 @@ namespace Blackjack
             // Play toggle sound whenever any checkbox is turned on.
             foreach (var toggle in new[] { blackjackTestToggle, bjAllToggle, ddTestToggle,
                                            testSplitToggle, overrideStrategyToggle,
-                                           alwaysLoseToggle, showStrategyToggle, martingaleActiveToggle })
+                                           alwaysLoseToggle, showStrategyToggle,
+                                           martingaleActiveToggle, martingaleAutoPlayToggle })
             {
                 if (toggle != null)
                     toggle.onValueChanged.AddListener(OnToggleSoundPlay);
@@ -111,8 +119,25 @@ namespace Blackjack
             if (controls != null && controls.ToggleMenuPressed)
                 ToggleMenu();
 
+            if (controls != null && controls.ShowStrategyPressed)
+                ToggleStrategyTable();
+
             if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
                 TryCloseStrategyTable();
+        }
+
+        /// <summary>Toggles the strategy table visibility and keeps the toggle and settings in sync.</summary>
+        private void ToggleStrategyTable()
+        {
+            if (strategyTableUI == null) return;
+
+            bool newValue = !strategyTableUI.gameObject.activeSelf;
+            _settings.showStrategyEnabled = newValue;
+            SettingsRepository.Save(_settings);
+            showStrategyToggle?.SetIsOnWithoutNotify(newValue);
+            strategyTableUI.SetVisible(newValue);
+
+            uiSounds?.toggleSound.Play(audioSource);
         }
 
         /// <summary>Closes the strategy table on right-click, unchecks the toggle, and plays the exit sound.</summary>
@@ -243,7 +268,33 @@ namespace Blackjack
             SettingsRepository.Save(_settings);
 
             if (value)
+            {
                 blackjackGame?.TryStartMartingaleFromToggle();
+            }
+            else
+            {
+                // Deactivating "Martingale is Active" also forces "Martingale automatically plays" off.
+                _settings.martingaleAutoPlay = false;
+                SettingsRepository.Save(_settings);
+                martingaleAutoPlayToggle?.SetIsOnWithoutNotify(false);
+
+                blackjackGame?.CancelMartingale();
+            }
+        }
+
+        private void OnMartingaleAutoPlayToggled(bool value)
+        {
+            _settings.martingaleAutoPlay = value;
+
+            // Enabling auto-play implies Martingale is active.
+            if (value && !_settings.martingaleActive)
+            {
+                _settings.martingaleActive = true;
+                martingaleActiveToggle?.SetIsOnWithoutNotify(true);
+                blackjackGame?.TryStartMartingaleFromToggle();
+            }
+
+            SettingsRepository.Save(_settings);
         }
 
         private void OnShowStrategyToggled(bool value)
@@ -288,6 +339,9 @@ namespace Blackjack
 
         /// <summary>When true, the Martingale suggestion popup is enabled.</summary>
         public bool IsMartingaleActive => _settings.martingaleActive;
+
+        /// <summary>When true, Martingale mode activates and doubles the bet automatically without showing the confirmation popup.</summary>
+        public bool IsMartingaleAutoPlay => _settings.martingaleAutoPlay;
 
         /// <summary>
         /// Programmatically activates the "Martingale is Active" checkbox.
@@ -398,6 +452,9 @@ namespace Blackjack
 
             if (martingaleActiveToggle != null)
                 martingaleActiveToggle.SetIsOnWithoutNotify(_settings.martingaleActive);
+
+            if (martingaleAutoPlayToggle != null)
+                martingaleAutoPlayToggle.SetIsOnWithoutNotify(_settings.martingaleAutoPlay);
 
             if (testSplitRankSlider != null)
                 testSplitRankSlider.SetValueWithoutNotify(_settings.testSplitRank);

@@ -166,6 +166,8 @@ namespace Blackjack
         private int _lastRoundBet;
         private bool _martingaleWin;
         private bool _martingalePopupShown;
+        // True once the player has accepted the Martingale popup. Cleared only on a win. Suppresses the popup while active.
+        private bool _inMartingaleMode;
         // True when the player is in active Martingale mode and lost the last round — bet should be doubled on next betting screen.
         private bool _pendingMartingaleDouble;
         // True after the player explicitly declines the Martingale popup. Suppresses re-prompting on Deal until the streak resets.
@@ -174,7 +176,8 @@ namespace Blackjack
         // Running score: +1 per win, -1 per loss, 0 for push or surrender.
         private int _playerScore;
 
-        private const int DelayedMartingaleThreshold = 4;
+        // Fallback used only when MenuController is not available. The authoritative value lives on MenuController.defaultMartingaleThreshold.
+        private const int DelayedMartingaleThreshold = 1;
 
         // Returns the effective Martingale trigger threshold from the menu slider, falling back to the hardcoded constant.
         private int EffectiveMartingaleThreshold =>
@@ -212,20 +215,20 @@ namespace Blackjack
 
         /// <summary>
         /// Called when the player manually enables the "Martingale is Active" checkbox.
-        /// If the game is in the betting/round-over phase, there is an active loss streak,
-        /// and the configured threshold is greater than or equal to the current streak count,
-        /// immediately applies the Martingale bet, closes the menu, and starts the next round.
+        /// If the game is in the betting/round-over phase and there is an active loss streak,
+        /// clears a previous decline, enters Martingale mode, doubles the bet, and auto-deals the next round.
         /// </summary>
         public void TryStartMartingaleFromToggle()
         {
             if (!IsBettingAllowed && !IsRoundOver) return;
-            if (_martingalePopupShown) return;
+            if (_inMartingaleMode) return;
             if (_consecutiveLosses <= 0) return;
 
-            bool thresholdCoversStreak = EffectiveMartingaleThreshold > 0 && EffectiveMartingaleThreshold >= _consecutiveLosses;
-            if (!thresholdCoversStreak) return;
+            // Clear a previous decline — the player is explicitly re-enabling Martingale.
+            _martingaleDeclined = false;
 
-            _martingalePopupShown = true;
+            _inMartingaleMode    = true;
+            _betBeforeMartingale = chipBetting != null ? chipBetting.TotalBet : 0;
 
             if (AlwaysLose)
             {
@@ -233,17 +236,37 @@ namespace Blackjack
                 OnAlwaysLoseDisabled?.Invoke();
             }
 
-            if (chipBetting != null)
+            menuController?.DisableOverrideStrategy();
+
+            if (IsRoundOver)
             {
-                _betBeforeMartingale = chipBetting.TotalBet;
-                int nextBet = (int)Math.Abs(_playerMoney) + chipBetting.SmallestChipValue;
-                chipBetting.SetMaxBet(nextBet);
-                chipBetting.SetBet(nextBet, playSound: true);
+                // PrepareForBetting will run as part of EnsureMinimumBet — defer the double so
+                // it applies after the saved bet snapshot is restored.
+                _pendingMartingaleDouble = true;
+            }
+            else
+            {
+                // State is Idle (Deal screen): PrepareForBetting won't run, so double immediately.
+                chipBetting?.DoubleBetChips(playSound: true);
             }
 
-            menuController?.DisableOverrideStrategy();
             RefreshStreakLabel();
             StartNewRound();
+        }
+
+        /// <summary>
+        /// Cancels Martingale mode immediately.
+        /// Called when the player unchecks the "Martingale is Active" checkbox in the menu.
+        /// Clears all Martingale flags so no doubling or popup will occur in subsequent rounds.
+        /// The consecutive-loss streak counter is preserved so the player can see their history.
+        /// </summary>
+        public void CancelMartingale()
+        {
+            _inMartingaleMode        = false;
+            _pendingMartingaleDouble = false;
+            _martingalePopupShown    = false;
+            _martingaleDeclined      = false;
+            RefreshStreakLabel();
         }
 
         /// <summary>Fired when the game automatically disables "Always Lose" upon entering Martingale mode.</summary>
@@ -293,6 +316,7 @@ namespace Blackjack
             _lastRoundBet             = 0;
             _martingaleWin            = false;
             _martingalePopupShown     = false;
+            _inMartingaleMode         = false;
             _pendingMartingaleDouble  = false;
             RefreshStreakLabel();
 
@@ -448,52 +472,56 @@ namespace Blackjack
             if (_state != GameState.Idle && _state != GameState.RoundOver) return;
             StopBlackjackCelebration();
 
-            // Show Martingale suggestion popup only after the player has lost exactly the threshold consecutive rounds.
+            bool martingaleActive   = menuController != null && menuController.IsMartingaleActive;
             bool consecutiveTrigger = EffectiveMartingaleThreshold > 0 && _consecutiveLosses >= EffectiveMartingaleThreshold;
 
-            if (martingalePopup != null
-                && consecutiveTrigger
-                && !_martingalePopupShown
-                && !_martingaleDeclined
-                && (menuController?.IsMartingaleActive ?? false))
+            if (martingaleActive && consecutiveTrigger && _martingalePopupShown && !_inMartingaleMode && !_martingaleDeclined && !_pendingMartingaleDouble)
             {
-                _martingalePopupShown = true;
-                martingalePopup.Show(
-                    "Play Martingale ?",
-                    onDoIt: () =>
-                    {
-                        // Disable "Always Lose" when entering Martingale mode.
-                        if (AlwaysLose)
+                _martingalePopupShown = false;
+
+                // Auto-play: skip popup, enter Martingale mode and deal immediately.
+                if (menuController.IsMartingaleAutoPlay)
+                {
+                    _inMartingaleMode        = true;
+                    _betBeforeMartingale     = chipBetting != null ? chipBetting.TotalBet : 0;
+                    _pendingMartingaleDouble = true;
+                    menuController.DisableOverrideStrategy();
+                    RefreshStreakLabel();
+                    StartNewRound();
+                    return;
+                }
+
+                // Manual: show the popup and wait for the player's choice.
+                if (martingalePopup != null)
+                {
+                    martingalePopup.Show(
+                        "Play Martingale ?",
+                        onDoIt: () =>
                         {
-                            AlwaysLose = false;
-                            OnAlwaysLoseDisabled?.Invoke();
-                        }
-
-                        if (chipBetting != null)
+                            if (AlwaysLose)
+                            {
+                                AlwaysLose = false;
+                                OnAlwaysLoseDisabled?.Invoke();
+                            }
+                            if (chipBetting != null)
+                            {
+                                _betBeforeMartingale = chipBetting.TotalBet;
+                                chipBetting.DoubleBetChips(playSound: true);
+                            }
+                            _inMartingaleMode = true;
+                            menuController?.DisableOverrideStrategy();
+                            RefreshStreakLabel();
+                            StartNewRound();
+                        },
+                        onReconsider: () =>
                         {
-                            // Snapshot the bet placed before Martingale so we can restore it on a win.
-                            _betBeforeMartingale = chipBetting.TotalBet;
-
-                            // Set bet to absolute player money loss so far plus one chip.
-                            int nextBet = (int)Math.Abs(_playerMoney) + chipBetting.SmallestChipValue;
-                            chipBetting.SetMaxBet(nextBet);
-                            chipBetting.SetBet(nextBet, playSound: true);
+                            _inMartingaleMode   = false;
+                            _martingaleDeclined = true;
+                            menuController?.DeactivateMartingale();
                         }
-
-                        // Disable the Override Strategy option while in Martingale mode.
-                        menuController?.DisableOverrideStrategy();
-                        SetStatus("Limit Exceeded", LoseColor);
-                        RefreshStreakLabel();
-                        StartNewRound();
-                    },
-                    onReconsider: () =>
-                    {
-                        _martingalePopupShown = false;
-                        _martingaleDeclined   = true;
-                        menuController?.DeactivateMartingale();
-                    }
-                );
-                return;
+                    );
+                    return;
+                }
             }
 
             StartNewRound();
@@ -1110,7 +1138,7 @@ namespace Blackjack
         /// <see cref="_playerScore"/>, and snapshots the bet for Delayed Martingale detection.
         /// <paramref name="lostAmount"/> is the monetary amount forfeited this round (full bet for a loss, half for surrender, 0 for win/push).
         /// <paramref name="scoreDelta"/> is +1 for a win, -1 for a loss, 0 for push or surrender.
-        /// <paramref name="isPush"/> when true, counts as half a loss toward the Martingale threshold without resetting streak or Martingale state.
+        /// <paramref name="isPush"/> when true, leaves the loss streak and all Martingale state completely unchanged — a push is neutral.
         /// <paramref name="isMartingaleNeutral"/> when true, leaves all Martingale and streak state completely unchanged (used for split rounds with no net score change).
         /// </summary>
         private void RecordRoundOutcome(bool isLoss, decimal lostAmount = 0, int scoreDelta = 0, bool isPush = false, bool isMartingaleNeutral = false)
@@ -1139,27 +1167,37 @@ namespace Blackjack
                 _consecutiveLosses++;
                 _totalLosses++;
                 _totalAmountLost += lostAmount;
-                // If the player is already in Martingale mode, schedule a bet double for the next betting phase.
-                if (_martingalePopupShown)
+
+                // Only drive Martingale state when the checkbox is enabled.
+                bool martingaleEnabled = menuController != null && menuController.IsMartingaleActive;
+                bool thresholdReached  = EffectiveMartingaleThreshold > 0 && _consecutiveLosses >= EffectiveMartingaleThreshold;
+
+                if (martingaleEnabled && _inMartingaleMode)
                 {
+                    // Already in Martingale — schedule a bet double for the next betting phase.
                     _pendingMartingaleDouble = true;
+                }
+                else if (martingaleEnabled && thresholdReached && !_martingaleDeclined)
+                {
+                    // Threshold just reached — arm the popup for the next Deal press.
+                    _martingalePopupShown = true;
                 }
             }
             else if (isPush)
             {
-                // A push counts as half a loss toward the Martingale threshold but does not reset streak or Martingale state.
-                _consecutiveLosses += 0.5m;
+                // A push is neutral — the loss streak and all Martingale state are left unchanged.
             }
             else
             {
-                // If the player wins while Martingale mode is active, schedule the minimum-bet reset for EndRound.
-                if (_martingalePopupShown)
+                // Player won — exit Martingale mode and schedule the minimum-bet reset for EndRound.
+                if (_inMartingaleMode)
                     _martingaleWin = true;
 
                 _consecutiveLosses       = 0;
                 _totalAmountLost         = 0;
                 _totalLosses             = 0;
                 _martingalePopupShown    = false;
+                _inMartingaleMode        = false;
                 _martingaleDeclined      = false;
                 _pendingMartingaleDouble = false;
             }
@@ -1322,6 +1360,10 @@ namespace Blackjack
 
             if (!_doubleBJSoundPlaying && _state == GameState.RoundOver)
                 SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
+
+            // Auto-deal the next round when already in Martingale mode and auto-play is enabled.
+            if (_inMartingaleMode && _pendingMartingaleDouble && (menuController?.IsMartingaleAutoPlay ?? false))
+                OnDeal();
             // State stays RoundOver — chip click or Deal press drives the next transition.
         }
 
@@ -1590,7 +1632,7 @@ namespace Blackjack
         /// </summary>
         private void PlayWinRoutine()
         {
-            if (_martingalePopupShown)
+            if (_inMartingaleMode)
             {
                 ApplyBlackjackGlow();
                 float celebrationDuration = PlayNaturalBlackjackSound();

@@ -18,6 +18,9 @@ namespace Blackjack
         [Tooltip("Open / close the developer menu panel. Responds to F1, F2, or F5.")]
         public Key toggleMenuKey = Key.F2;
 
+        [Tooltip("Show / hide the strategy table.")]
+        public Key toggleStrategyKey = Key.S;
+
         [Header("Application")]
         [Tooltip("Close menu if open, otherwise quit / stop Play Mode.")]
         public Key quitKey = Key.Escape;
@@ -35,6 +38,11 @@ namespace Blackjack
             (Keyboard.current[Key.F1].wasPressedThisFrame ||
              Keyboard.current[Key.F2].wasPressedThisFrame ||
              Keyboard.current[Key.F5].wasPressedThisFrame);
+
+        /// <summary>Returns true if the strategy table toggle key was pressed this frame.</summary>
+        public bool ShowStrategyPressed =>
+            Keyboard.current != null &&
+            Keyboard.current[toggleStrategyKey].wasPressedThisFrame;
 
         /// <summary>Returns true if the quit key was pressed this frame.</summary>
         public bool QuitPressed =>
