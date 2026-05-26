@@ -8,7 +8,7 @@ namespace Blackjack
     /// <summary>
     /// Toggles the developer menu panel with F2.
     /// Controls visibility of the three test buttons and the master volume.
-    /// All changes are persisted to disk via <see cref="SettingsRepository"/>.
+    /// All settings are session-only and live in an in-memory <see cref="OptionsSettings"/> instance.
     /// </summary>
     [RequireComponent(typeof(AudioSource))]
     public class MenuController : MonoBehaviour
@@ -61,6 +61,11 @@ namespace Blackjack
         private const string MasterVolumeParam = "MasterVolume";
 
         private OptionsSettings _settings;
+        private CanvasGroup     _menuCanvasGroup;
+        private bool            _menuVisible;
+
+        /// <summary>Guard flag to prevent re-entrant callback processing when programmatically setting toggle values.</summary>
+        private bool _suppressToggleCallbacks;
 
         // ──────────────────────────────────────────────────────────────────────────
         // Unity lifecycle
@@ -71,16 +76,19 @@ namespace Blackjack
             if (audioSource == null)
                 audioSource = GetComponent<AudioSource>();
 
-            _settings = SettingsRepository.Load();
+            // Cache the CanvasGroup used to show/hide the panel without SetActive.
+            if (menuPanel != null)
+                _menuCanvasGroup = menuPanel.GetComponent<CanvasGroup>();
+
+            _settings = new OptionsSettings();
 
             // Always start from the Inspector-configured default so the designer controls the threshold.
             _settings.martingaleThreshold = defaultMartingaleThreshold;
 
-            // Martingale toggles are session-only — always reset to off on startup so the
-            // persisted JSON can never cause a stale active state.
-            _settings.martingaleActive   = false;
-            _settings.martingaleAutoPlay = false;
-            SettingsRepository.Save(_settings);
+            // Martingale and strategy table are session-only — always start off.
+            _settings.martingaleActive    = false;
+            _settings.martingaleAutoPlay  = false;
+            _settings.showStrategyEnabled = false;
 
             ApplySettings();
 
@@ -108,14 +116,12 @@ namespace Blackjack
                     toggle.onValueChanged.AddListener(OnToggleSoundPlay);
             }
 
-            menuPanel?.SetActive(false);
+            // Hide the panel via CanvasGroup — keeps the GameObject active so listeners survive.
+            SetMenuVisible(false);
         }
 
         private void Start()
         {
-            // Ensure the panel is hidden even if Awake order caused it to show briefly.
-            menuPanel?.SetActive(false);
-
             if (blackjackGame != null)
                 blackjackGame.OnAlwaysLoseDisabled += DisableAlwaysLose;
         }
@@ -137,9 +143,9 @@ namespace Blackjack
         {
             if (strategyTableUI == null) return;
 
-            bool newValue = !strategyTableUI.gameObject.activeSelf;
+            bool isCurrentlyVisible = strategyTableUI.gameObject.activeSelf;
+            bool newValue = !isCurrentlyVisible;
             _settings.showStrategyEnabled = newValue;
-            SettingsRepository.Save(_settings);
             showStrategyToggle?.SetIsOnWithoutNotify(newValue);
             strategyTableUI.SetVisible(newValue);
 
@@ -154,7 +160,6 @@ namespace Blackjack
             strategyTableUI.SetVisible(false);
 
             _settings.showStrategyEnabled = false;
-            SettingsRepository.Save(_settings);
             showStrategyToggle?.SetIsOnWithoutNotify(false);
 
             blackjackGame?.PlayCloseSound();
@@ -177,34 +182,29 @@ namespace Blackjack
         {
             blackjackTestButton?.SetActive(value);
             _settings.blackjackTestEnabled = value;
-            SettingsRepository.Save(_settings);
         }
 
         private void OnBjAllToggled(bool value)
         {
             bjAllButton?.SetActive(value);
             _settings.bjAllEnabled = value;
-            SettingsRepository.Save(_settings);
         }
 
         private void OnDdTestToggled(bool value)
         {
             ddTestButton?.SetActive(value);
             _settings.ddTestEnabled = value;
-            SettingsRepository.Save(_settings);
         }
 
         private void OnTestSplitToggled(bool value)
         {
             testSplitButton?.SetActive(value);
             _settings.testSplitEnabled = value;
-            SettingsRepository.Save(_settings);
         }
 
         private void OnOverrideStrategyToggled(bool value)
         {
             _settings.overrideStrategyEnabled = value;
-            SettingsRepository.Save(_settings);
         }
 
         /// <summary>Forces the player to lose every round when enabled. Used for Martingale testing.</summary>
@@ -213,14 +213,12 @@ namespace Blackjack
             if (blackjackGame != null)
                 blackjackGame.AlwaysLose = value;
             _settings.alwaysLoseEnabled = value;
-            SettingsRepository.Save(_settings);
         }
 
         /// <summary>Called by BlackjackGame when it automatically turns off Always Lose upon entering Martingale mode.</summary>
         private void DisableAlwaysLose()
         {
             _settings.alwaysLoseEnabled = false;
-            SettingsRepository.Save(_settings);
             alwaysLoseToggle?.SetIsOnWithoutNotify(false);
         }
 
@@ -234,17 +232,12 @@ namespace Blackjack
             if (_settings.alwaysLoseEnabled)
             {
                 _settings.alwaysLoseEnabled = false;
-                SettingsRepository.Save(_settings);
                 alwaysLoseToggle?.SetIsOnWithoutNotify(false);
                 if (blackjackGame != null)
                     blackjackGame.AlwaysLose = false;
             }
         }
 
-        /// <summary>
-        /// Enables or disables the Override Strategy checkbox.
-        /// Call with <c>false</c> when entering Martingale mode, <c>true</c> when leaving it.
-        /// </summary>
         public void SetOverrideStrategyInteractable(bool interactable)
         {
             if (overrideStrategyToggle == null) return;
@@ -253,7 +246,6 @@ namespace Blackjack
             {
                 overrideStrategyToggle.SetIsOnWithoutNotify(false);
                 _settings.overrideStrategyEnabled = false;
-                SettingsRepository.Save(_settings);
             }
         }
 
@@ -263,16 +255,15 @@ namespace Blackjack
                 audioMixer.SetFloat(MasterVolumeParam, LinearToDb(linear));
 
             _settings.volume = linear;
-            SettingsRepository.Save(_settings);
         }
 
         private void OnMartingaleThresholdToggled(bool value) { }
 
         public void OnMartingaleActiveToggled(bool value)
         {
-            Debug.Log($"[Martingale] OnMartingaleActiveToggled: value={value}  →  martingaleActive will be {value}");
+            if (_suppressToggleCallbacks) return;
+
             _settings.martingaleActive = value;
-            SettingsRepository.Save(_settings);
 
             if (value)
             {
@@ -282,7 +273,6 @@ namespace Blackjack
             {
                 // Deactivating "Martingale is Active" also forces "Martingale automatically plays" off.
                 _settings.martingaleAutoPlay = false;
-                SettingsRepository.Save(_settings);
                 martingaleAutoPlayToggle?.SetIsOnWithoutNotify(false);
 
                 blackjackGame?.CancelMartingale();
@@ -291,29 +281,34 @@ namespace Blackjack
 
         public void OnMartingaleAutoPlayToggled(bool value)
         {
+            if (_suppressToggleCallbacks) return;
+
             _settings.martingaleAutoPlay = value;
+        }
 
-            // Enabling auto-play implies Martingale is active.
-            if (value && !_settings.martingaleActive)
-            {
-                _settings.martingaleActive = true;
-                martingaleActiveToggle?.SetIsOnWithoutNotify(true);
-                blackjackGame?.TryStartMartingaleFromToggle();
-            }
+    /// <summary>
+    /// Programmatically checks a toggle without firing its onValueChanged callbacks.
+    /// Works reliably because the affected toggles use ToggleTransition.None, which
+    /// makes SetIsOnWithoutNotify update the checkmark graphic instantly.
+    /// </summary>
+    private void ForceToggleChecked(Toggle toggle)
+        {
+            if (toggle == null) return;
 
-            SettingsRepository.Save(_settings);
+            _suppressToggleCallbacks = true;
+            toggle.SetIsOnWithoutNotify(true);
+            _suppressToggleCallbacks = false;
         }
 
         private void OnShowStrategyToggled(bool value)
         {
             _settings.showStrategyEnabled = value;
-            SettingsRepository.Save(_settings);
             strategyTableUI?.SetVisible(value);
         }
 
-        private void OnMartingaleThresholdChanged(float value)        {
+        private void OnMartingaleThresholdChanged(float value)
+        {
             _settings.martingaleThreshold = Mathf.RoundToInt(value);
-            SettingsRepository.Save(_settings);
         }
 
         /// <summary>Persists the selected test-split rank (2–14, matching the Rank enum).</summary>
@@ -322,7 +317,6 @@ namespace Blackjack
             if (_settings == null) return;
 
             _settings.testSplitRank = Mathf.RoundToInt(value);
-            SettingsRepository.Save(_settings);
         }
 
         /// <summary>Resets the game to the initial state. Called by the Reset Game button inside the menu panel.</summary>
@@ -336,7 +330,7 @@ namespace Blackjack
         // ──────────────────────────────────────────────────────────────────────────
 
         /// <summary>True while the menu panel is visible.</summary>
-        public bool IsMenuOpen => menuPanel != null && menuPanel.activeSelf;
+        public bool IsMenuOpen => _menuVisible;
 
         /// <summary>When true, strategy deviation popup is bypassed and the player's action executes immediately.</summary>
         public bool IsStrategyOverrideEnabled => _settings.overrideStrategyEnabled;
@@ -358,8 +352,8 @@ namespace Blackjack
         {
             if (_settings.martingaleActive) return;
             _settings.martingaleActive = true;
-            SettingsRepository.Save(_settings);
-            martingaleActiveToggle?.SetIsOnWithoutNotify(true);
+
+            ForceToggleChecked(martingaleActiveToggle);
         }
 
         /// <summary>
@@ -370,19 +364,13 @@ namespace Blackjack
         {
             if (!_settings.overrideStrategyEnabled) return;
             _settings.overrideStrategyEnabled = false;
-            SettingsRepository.Save(_settings);
             overrideStrategyToggle?.SetIsOnWithoutNotify(false);
         }
 
-        /// <summary>
-        /// Programmatically deactivates the "Martingale is Active" checkbox.
-        /// Used when the player declines the Martingale popup.
-        /// </summary>
         public void DeactivateMartingale()
         {
             if (!_settings.martingaleActive) return;
             _settings.martingaleActive = false;
-            SettingsRepository.Save(_settings);
             martingaleActiveToggle?.SetIsOnWithoutNotify(false);
         }
 
@@ -396,25 +384,34 @@ namespace Blackjack
         private void ToggleMenu()
         {
             if (menuPanel == null) return;
-            bool closing = menuPanel.activeSelf;
 
             // Only allow opening when no round is in progress.
-            if (!closing && blackjackGame != null && !blackjackGame.IsBettingAllowed && !blackjackGame.IsRoundOver)
+            if (!_menuVisible && blackjackGame != null && !blackjackGame.IsBettingAllowed && !blackjackGame.IsRoundOver)
                 return;
 
-            menuPanel.SetActive(!closing);
-            if (closing) blackjackGame?.PlayCloseSound();
+            SetMenuVisible(!_menuVisible);
+            if (!_menuVisible) blackjackGame?.PlayCloseSound();
         }
 
         /// <summary>Closes the menu panel if it is currently open.</summary>
         /// <param name="playSound">When false, suppresses the close sound. Defaults to true.</param>
         public void CloseMenu(bool playSound = true)
         {
-            if (menuPanel != null && menuPanel.activeSelf)
+            if (_menuVisible)
             {
-                menuPanel.SetActive(false);
+                SetMenuVisible(false);
                 if (playSound) blackjackGame?.PlayCloseSound();
             }
+        }
+
+        /// <summary>Shows or hides the menu via CanvasGroup, keeping the GameObject always active so listeners survive.</summary>
+        private void SetMenuVisible(bool visible)
+        {
+            _menuVisible = visible;
+            if (_menuCanvasGroup == null) return;
+            _menuCanvasGroup.alpha          = visible ? 1f : 0f;
+            _menuCanvasGroup.interactable   = visible;
+            _menuCanvasGroup.blocksRaycasts = visible;
         }
 
         /// <summary>Pushes all loaded settings into the UI and the AudioMixer.</summary>
