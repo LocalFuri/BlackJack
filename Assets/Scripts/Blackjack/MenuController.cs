@@ -76,6 +76,12 @@ namespace Blackjack
             // Always start from the Inspector-configured default so the designer controls the threshold.
             _settings.martingaleThreshold = defaultMartingaleThreshold;
 
+            // Martingale toggles are session-only — always reset to off on startup so the
+            // persisted JSON can never cause a stale active state.
+            _settings.martingaleActive   = false;
+            _settings.martingaleAutoPlay = false;
+            SettingsRepository.Save(_settings);
+
             ApplySettings();
 
             // Register callbacks after applying so initial apply does not trigger saves.
@@ -262,8 +268,9 @@ namespace Blackjack
 
         private void OnMartingaleThresholdToggled(bool value) { }
 
-        private void OnMartingaleActiveToggled(bool value)
+        public void OnMartingaleActiveToggled(bool value)
         {
+            Debug.Log($"[Martingale] OnMartingaleActiveToggled: value={value}  →  martingaleActive will be {value}");
             _settings.martingaleActive = value;
             SettingsRepository.Save(_settings);
 
@@ -282,7 +289,7 @@ namespace Blackjack
             }
         }
 
-        private void OnMartingaleAutoPlayToggled(bool value)
+        public void OnMartingaleAutoPlayToggled(bool value)
         {
             _settings.martingaleAutoPlay = value;
 

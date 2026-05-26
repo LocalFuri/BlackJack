@@ -215,43 +215,76 @@ namespace Blackjack
 
         /// <summary>
         /// Called when the player manually enables the "Martingale is Active" checkbox.
-        /// If the game is in the betting/round-over phase and there is an active loss streak,
-        /// clears a previous decline, enters Martingale mode, doubles the bet, and auto-deals the next round.
+        /// Clears any previous decline so the popup can fire again.
+        /// If the loss threshold is already met, shows the popup immediately regardless of game state.
+        /// Does NOT double the bet or start a round — the popup handles that.
         /// </summary>
         public void TryStartMartingaleFromToggle()
         {
-            if (!IsBettingAllowed && !IsRoundOver) return;
-            if (_inMartingaleMode) return;
-            if (_consecutiveLosses <= 0) return;
-
             // Clear a previous decline — the player is explicitly re-enabling Martingale.
             _martingaleDeclined = false;
 
-            _inMartingaleMode    = true;
-            _betBeforeMartingale = chipBetting != null ? chipBetting.TotalBet : 0;
+            bool thresholdMet = EffectiveMartingaleThreshold > 0 && _consecutiveLosses >= EffectiveMartingaleThreshold;
 
-            if (AlwaysLose)
-            {
-                AlwaysLose = false;
-                OnAlwaysLoseDisabled?.Invoke();
-            }
+            Debug.Log($"[Martingale] TryStartMartingaleFromToggle: losses={_consecutiveLosses} threshold={EffectiveMartingaleThreshold} thresholdMet={thresholdMet} inMode={_inMartingaleMode}");
 
-            menuController?.DisableOverrideStrategy();
-
-            if (IsRoundOver)
-            {
-                // PrepareForBetting will run as part of EnsureMinimumBet — defer the double so
-                // it applies after the saved bet snapshot is restored.
-                _pendingMartingaleDouble = true;
-            }
-            else
-            {
-                // State is Idle (Deal screen): PrepareForBetting won't run, so double immediately.
-                chipBetting?.DoubleBetChips(playSound: true);
-            }
+            if (thresholdMet && !_inMartingaleMode)
+                ShowMartingalePopup();
 
             RefreshStreakLabel();
-            StartNewRound();
+        }
+
+        /// <summary>
+        /// Shows the Martingale popup (or activates auto-play silently).
+        /// Called from EndRound when the threshold is reached, and from TryStartMartingaleFromToggle
+        /// when the checkbox is enabled while already in RoundOver with enough losses.
+        /// </summary>
+        private void ShowMartingalePopup()
+        {
+            Debug.Log($"[Martingale] ShowMartingalePopup: autoPlay={menuController?.IsMartingaleAutoPlay} popupNull={martingalePopup == null}");
+
+            // Auto-play: skip popup, enter Martingale mode and deal immediately.
+            if (menuController != null && menuController.IsMartingaleAutoPlay)
+            {
+                _inMartingaleMode        = true;
+                _betBeforeMartingale     = chipBetting != null ? chipBetting.TotalBet : 0;
+                _pendingMartingaleDouble = true;
+                menuController.DisableOverrideStrategy();
+                RefreshStreakLabel();
+                OnDeal();
+                return;
+            }
+
+            // Manual: show the popup and wait for the player's choice.
+            if (martingalePopup != null)
+            {
+                martingalePopup.Show(
+                    "Play Martingale ?",
+                    onDoIt: () =>
+                    {
+                        if (AlwaysLose)
+                        {
+                            AlwaysLose = false;
+                            OnAlwaysLoseDisabled?.Invoke();
+                        }
+                        if (chipBetting != null)
+                        {
+                            _betBeforeMartingale = chipBetting.TotalBet;
+                            chipBetting.DoubleBetChips(playSound: true);
+                        }
+                        _inMartingaleMode = true;
+                        menuController?.DisableOverrideStrategy();
+                        RefreshStreakLabel();
+                        StartNewRound();
+                    },
+                    onReconsider: () =>
+                    {
+                        _inMartingaleMode   = false;
+                        _martingaleDeclined = true;
+                        menuController?.DeactivateMartingale();
+                    }
+                );
+            }
         }
 
         /// <summary>
@@ -471,59 +504,6 @@ namespace Blackjack
         {
             if (_state != GameState.Idle && _state != GameState.RoundOver) return;
             StopBlackjackCelebration();
-
-            bool martingaleActive   = menuController != null && menuController.IsMartingaleActive;
-            bool consecutiveTrigger = EffectiveMartingaleThreshold > 0 && _consecutiveLosses >= EffectiveMartingaleThreshold;
-
-            if (martingaleActive && consecutiveTrigger && _martingalePopupShown && !_inMartingaleMode && !_martingaleDeclined && !_pendingMartingaleDouble)
-            {
-                _martingalePopupShown = false;
-
-                // Auto-play: skip popup, enter Martingale mode and deal immediately.
-                if (menuController.IsMartingaleAutoPlay)
-                {
-                    _inMartingaleMode        = true;
-                    _betBeforeMartingale     = chipBetting != null ? chipBetting.TotalBet : 0;
-                    _pendingMartingaleDouble = true;
-                    menuController.DisableOverrideStrategy();
-                    RefreshStreakLabel();
-                    StartNewRound();
-                    return;
-                }
-
-                // Manual: show the popup and wait for the player's choice.
-                if (martingalePopup != null)
-                {
-                    martingalePopup.Show(
-                        "Play Martingale ?",
-                        onDoIt: () =>
-                        {
-                            if (AlwaysLose)
-                            {
-                                AlwaysLose = false;
-                                OnAlwaysLoseDisabled?.Invoke();
-                            }
-                            if (chipBetting != null)
-                            {
-                                _betBeforeMartingale = chipBetting.TotalBet;
-                                chipBetting.DoubleBetChips(playSound: true);
-                            }
-                            _inMartingaleMode = true;
-                            menuController?.DisableOverrideStrategy();
-                            RefreshStreakLabel();
-                            StartNewRound();
-                        },
-                        onReconsider: () =>
-                        {
-                            _inMartingaleMode   = false;
-                            _martingaleDeclined = true;
-                            menuController?.DeactivateMartingale();
-                        }
-                    );
-                    return;
-                }
-            }
-
             StartNewRound();
         }
 
@@ -1143,6 +1123,8 @@ namespace Blackjack
         /// </summary>
         private void RecordRoundOutcome(bool isLoss, decimal lostAmount = 0, int scoreDelta = 0, bool isPush = false, bool isMartingaleNeutral = false)
         {
+            Debug.Log($"[Martingale] RecordRoundOutcome called: isLoss={isLoss} isPush={isPush} isMartingaleNeutral={isMartingaleNeutral} AlwaysLose={AlwaysLose}");
+
             _lastRoundBet  = CurrentBet + _doubleDownExtraBet;
             _playerScore  += scoreDelta;
 
@@ -1168,18 +1150,18 @@ namespace Blackjack
                 _totalLosses++;
                 _totalAmountLost += lostAmount;
 
-                // Only drive Martingale state when the checkbox is enabled.
-                bool martingaleEnabled = menuController != null && menuController.IsMartingaleActive;
-                bool thresholdReached  = EffectiveMartingaleThreshold > 0 && _consecutiveLosses >= EffectiveMartingaleThreshold;
+                bool thresholdReached = EffectiveMartingaleThreshold > 0 && _consecutiveLosses >= EffectiveMartingaleThreshold;
 
-                if (martingaleEnabled && _inMartingaleMode)
+                Debug.Log($"[Martingale] Loss recorded: losses={_consecutiveLosses} threshold={EffectiveMartingaleThreshold} thresholdReached={thresholdReached} inMode={_inMartingaleMode} declined={_martingaleDeclined}");
+
+                if (_inMartingaleMode)
                 {
                     // Already in Martingale — schedule a bet double for the next betting phase.
                     _pendingMartingaleDouble = true;
                 }
-                else if (martingaleEnabled && thresholdReached && !_martingaleDeclined)
+                else if (thresholdReached && !_martingaleDeclined)
                 {
-                    // Threshold just reached — arm the popup for the next Deal press.
+                    // Threshold just reached — arm the popup for EndRound.
                     _martingalePopupShown = true;
                 }
             }
@@ -1360,6 +1342,17 @@ namespace Blackjack
 
             if (!_doubleBJSoundPlaying && _state == GameState.RoundOver)
                 SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
+
+            // Show Martingale popup immediately when the threshold was just reached.
+            if (_martingalePopupShown && !_inMartingaleMode && !_martingaleDeclined)
+            {
+                Debug.Log("[Martingale] EndRound: showing popup");
+                _martingalePopupShown = false;
+                ShowMartingalePopup();
+                yield break;
+            }
+
+            Debug.Log($"[Martingale] EndRound: popup NOT shown. shown={_martingalePopupShown} inMode={_inMartingaleMode} declined={_martingaleDeclined}");
 
             // Auto-deal the next round when already in Martingale mode and auto-play is enabled.
             if (_inMartingaleMode && _pendingMartingaleDouble && (menuController?.IsMartingaleAutoPlay ?? false))
