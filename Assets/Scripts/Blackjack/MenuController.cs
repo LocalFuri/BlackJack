@@ -85,10 +85,12 @@ namespace Blackjack
             // Always start from the Inspector-configured default so the designer controls the threshold.
             _settings.martingaleThreshold = defaultMartingaleThreshold;
 
-            // Martingale and strategy table are session-only — always start off.
-            _settings.martingaleActive    = false;
-            _settings.martingaleAutoPlay  = false;
-            _settings.showStrategyEnabled = false;
+            // Martingale is session-only — always start off.
+            _settings.martingaleActive   = false;
+            _settings.martingaleAutoPlay = false;
+
+            // Seed the strategy table toggle from the Inspector field on BlackjackGame.
+            _settings.showStrategyEnabled = blackjackGame != null && blackjackGame.ShowStrategyTable;
 
             ApplySettings();
 
@@ -309,6 +311,34 @@ namespace Blackjack
         private void OnMartingaleThresholdChanged(float value)
         {
             _settings.martingaleThreshold = Mathf.RoundToInt(value);
+            ApplyMartingaleThresholdState();
+        }
+
+        /// <summary>Grays out and unchecks the Martingale toggles when the threshold is 0.</summary>
+        private void ApplyMartingaleThresholdState()
+        {
+            bool enabled = _settings.martingaleThreshold > 0;
+
+            if (martingaleActiveToggle != null)
+            {
+                martingaleActiveToggle.interactable = enabled;
+                if (!enabled)
+                {
+                    martingaleActiveToggle.SetIsOnWithoutNotify(false);
+                    _settings.martingaleActive = false;
+                    blackjackGame?.CancelMartingale();
+                }
+            }
+
+            if (martingaleAutoPlayToggle != null)
+            {
+                martingaleAutoPlayToggle.interactable = enabled;
+                if (!enabled)
+                {
+                    martingaleAutoPlayToggle.SetIsOnWithoutNotify(false);
+                    _settings.martingaleAutoPlay = false;
+                }
+            }
         }
 
         /// <summary>Persists the selected test-split rank (2–14, matching the Rank enum).</summary>
@@ -462,6 +492,8 @@ namespace Blackjack
 
             if (testSplitRankSlider != null)
                 testSplitRankSlider.SetValueWithoutNotify(_settings.testSplitRank);
+
+            ApplyMartingaleThresholdState();
         }
 
         // Converts a linear [0,1] slider value to decibels for the AudioMixer.

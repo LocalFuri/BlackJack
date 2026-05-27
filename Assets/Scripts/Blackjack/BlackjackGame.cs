@@ -49,6 +49,7 @@ namespace Blackjack
 
         [Header("Strategy Table")]
         [SerializeField] private Blackjack.UI.StrategyTableUI strategyTableUI;
+        [SerializeField] private bool showStrategyTable = true;
 
         [Header("Score Labels")]
         [SerializeField] private TextMeshProUGUI playerScoreLabel;
@@ -165,6 +166,7 @@ namespace Blackjack
         private decimal _totalAmountLost;
         private int _lastRoundBet;
         private bool _martingaleWin;
+        private bool _playerWon;
         private bool _martingalePopupShown;
         // True once the player has accepted the Martingale popup. Cleared only on a win. Suppresses the popup while active.
         private bool _inMartingaleMode;
@@ -209,6 +211,9 @@ namespace Blackjack
         /// <summary>Closes the menu panel. Used by <see cref="ChipBetting"/> when a bet action is taken during the betting phase.</summary>
         /// <param name="playSound">When false, suppresses the close sound. Defaults to true.</param>
         public void CloseMenu(bool playSound = true) => menuController?.CloseMenu(playSound);
+
+        /// <summary>Inspector-configured default for whether the strategy table starts visible.</summary>
+        public bool ShowStrategyTable => showStrategyTable;
 
         /// <summary>When true, the player always loses the round regardless of card values. Used for Martingale testing.</summary>
         public bool AlwaysLose { get; set; }
@@ -348,6 +353,7 @@ namespace Blackjack
             _playerScore              = 0;
             _lastRoundBet             = 0;
             _martingaleWin            = false;
+            _playerWon                = false;
             _martingalePopupShown     = false;
             _inMartingaleMode         = false;
             _pendingMartingaleDouble  = false;
@@ -431,6 +437,9 @@ namespace Blackjack
 
             if (chipBetting != null)
                 chipBetting.OnBetChanged += OnBetChangedHandler;
+
+            if (strategyTableUI != null)
+                strategyTableUI.gameObject.SetActive(showStrategyTable);
 
             _deck.Build();
             _defaultStatusColor = statusLabel.color;
@@ -516,6 +525,7 @@ namespace Blackjack
             if (_doubleBJSoundPlaying) return;
             StopAllCoroutines();
             _martingaleWin = false;
+            _playerWon = false;
             dealButton.gameObject.SetActive(false);
             menuController?.CloseMenu();
             EnsureMinimumBet();
@@ -768,7 +778,8 @@ namespace Blackjack
                         ApplyBlackjackGlow();
                         SpawnFireworks(PlayNaturalBlackjackSound());
                         RecordRoundOutcome(false, scoreDelta: +1);
-                        SetStatus("You win", WinColor);
+                        _playerWon = true;
+                        SetStatus(_martingaleWin ? "Won during Martingale" : "You win", WinColor);
                         ApplyPayout(PayoutResult.BlackjackWin, CurrentBet);
                     }
                 }
@@ -1238,7 +1249,7 @@ namespace Blackjack
                         splitLostAmount += handBet;
                         ApplyPayout(PayoutResult.Lose, handBet);
                     }
-                    else if (dealerBust || s > dealerScore)
+                    else if (s == BlackjackValue || dealerBust || s > dealerScore)
                     {
                         results.Add(ColorizeText($"{labels[i]}: Win", WinColor));
                         anyWin = true;
@@ -1270,7 +1281,7 @@ namespace Blackjack
                     }
                 }
 
-                if (anyWin)       { PlayWinRoutine(); }
+                if (anyWin)       { PlayWinRoutine(); _playerWon = true; }
                 else if (anyLoss) PlayLoseSound();
                 else              PlayTieSound();
 
@@ -1288,10 +1299,15 @@ namespace Blackjack
             else
             {
                 int p = _playerHand.BestValue();
+                // For losses/pushes the full staked amount (bet area + extra double-down deduction) is at risk.
                 int totalBet = CurrentBet + _doubleDownExtraBet;
-                if      (dealerBust)         { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); SetStatus($"You win", WinColor);  ApplyPayout(PayoutResult.Win,  totalBet); }
-                else if (p > dealerScore)    { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); SetStatus($"You win", WinColor);  ApplyPayout(PayoutResult.Win,  totalBet); }
-                else if (dealerScore > p)    { PlayLoseSound(); RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1);  SetStatus($"You lose",LoseColor); ApplyPayout(PayoutResult.Lose, totalBet); }
+                // For wins, pay out based on what is visible in the bet area only (CurrentBet).
+                // On a double-down CurrentBet already equals twice the original stake.
+                int winBet = CurrentBet;
+                if      (p == BlackjackValue)    { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won during Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
+                else if (dealerBust)             { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won during Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
+                else if (p > dealerScore)        { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won during Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
+                else if (dealerScore > p)        { PlayLoseSound(); RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1);  SetStatus($"You lose",LoseColor); ApplyPayout(PayoutResult.Lose, totalBet); }
                 else
                 {
                     if (AlwaysLose)
@@ -1331,13 +1347,14 @@ namespace Blackjack
             if (remaining > 0f)
                 yield return new WaitForSeconds(remaining);
 
-            // Reset to minimum bet on a Martingale win.
-            if (_martingaleWin && chipBetting != null)
+            // Reset to minimum bet on any win.
+            if (_playerWon && chipBetting != null)
             {
-                chipBetting.SetBet(chipBetting.SmallestChipValue);
+                chipBetting.ResetToMinimumBet();
                 chipBetting.SnapshotBet();
                 _betBeforeMartingale = 0;
                 _martingaleWin       = false;
+                _playerWon           = false;
             }
 
             if (!_doubleBJSoundPlaying && _state == GameState.RoundOver)

@@ -440,12 +440,12 @@ namespace Blackjack
                     return;
             }
 
-            if (TotalBet > 0)
+            if (TotalBet > SmallestChipValue)
                 chipResetSound.Play(audioSource);
             else
                 blackjackGame?.PlayKnockSound();
 
-            ClearBetArea();
+            ResetToMinimumBet();
         }
 
         private void OnChipMaxClicked()
@@ -552,6 +552,10 @@ namespace Blackjack
             if (!_stacks.ContainsKey(typeIndex) || _stacks[typeIndex].Count == 0) return;
 
             int chipValue = chipTypes[typeIndex].value;
+
+            // Never allow the bet to drop below 1 chip (the smallest denomination).
+            if (TotalBet - chipValue < SmallestChipValue) return;
+
             chipSound.Play(audioSource);
             RemoveTopChips(typeIndex, 1);
             OnBetChanged?.Invoke(-chipValue);
