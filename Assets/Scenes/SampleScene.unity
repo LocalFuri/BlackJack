@@ -795,7 +795,19 @@ MonoBehaviour:
   m_Value: 1
   m_OnValueChanged:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 383359004}
+        m_TargetAssemblyTypeName: Blackjack.MenuController, Assembly-CSharp
+        m_MethodName: OnMartingaleThresholdChanged
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: 
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &103199054
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -809,6 +821,21 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   valueLabel: {fileID: 2133719898}
+  onValueChanged:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 383359004}
+        m_TargetAssemblyTypeName: Blackjack.MenuController, Assembly-CSharp
+        m_MethodName: OnMartingaleThresholdChanged
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: 
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
   useRankLabels: 0
   colorThreshold: 0
   aboveThresholdColor: {r: 1, g: 0, b: 0, a: 1}
@@ -1391,12 +1418,12 @@ RectTransform:
   - {fileID: 1815748833}
   - {fileID: 84585212}
   - {fileID: 1246040044}
-  m_Father: {fileID: 1489965552}
+  m_Father: {fileID: 955693799}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMin: {x: 0.42, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 150, y: 36}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &241324253
 MonoBehaviour:
@@ -1702,6 +1729,7 @@ GameObject:
   m_Component:
   - component: {fileID: 287415251}
   - component: {fileID: 287415252}
+  - component: {fileID: 287415253}
   m_Layer: 0
   m_Name: MartingaleActiveToggle
   m_TagString: Untagged
@@ -1777,6 +1805,19 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_IsOn: 0
+--- !u!114 &287415253
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 287415250}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d8e5f3c20a4b5d6e7f8a9b0c1d2e3f4a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  thresholdSlider: {fileID: 103199053}
 --- !u!1 &287653931
 GameObject:
   m_ObjectHideFlags: 0
@@ -2782,8 +2823,8 @@ MonoBehaviour:
   testSplitToggle: {fileID: 1432592433}
   overrideStrategyToggle: {fileID: 1761104381}
   alwaysLoseToggle: {fileID: 1214810044}
-  showStrategyToggle: {fileID: 287415252}
-  martingaleActiveToggle: {fileID: 438984259}
+  showStrategyToggle: {fileID: 438984259}
+  martingaleActiveToggle: {fileID: 287415252}
   martingaleAutoPlayToggle: {fileID: 802376527}
   volumeSlider: {fileID: 1605614848}
   audioMixer: {fileID: 24100000, guid: 685259ded7f36ac449db40d064bcee55, type: 2}
@@ -6077,6 +6118,7 @@ GameObject:
   m_Component:
   - component: {fileID: 802376526}
   - component: {fileID: 802376527}
+  - component: {fileID: 802376528}
   m_Layer: 0
   m_Name: MartingaleAutoPlayToggle
   m_TagString: Untagged
@@ -6152,6 +6194,19 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_IsOn: 0
+--- !u!114 &802376528
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 802376525}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d8e5f3c20a4b5d6e7f8a9b0c1d2e3f4a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  thresholdSlider: {fileID: 103199053}
 --- !u!1 &802495395
 GameObject:
   m_ObjectHideFlags: 0
@@ -6937,13 +6992,14 @@ RectTransform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 241324252}
   m_Father: {fileID: 1489965552}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 170, y: 28}
+  m_SizeDelta: {x: 300, y: 28}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &955693800
 MonoBehaviour:
@@ -8268,9 +8324,9 @@ RectTransform:
   - {fileID: 1566798254}
   - {fileID: 2041634680}
   - {fileID: 1581436530}
-  - {fileID: 1119540006}
-  - {fileID: 703855974}
   - {fileID: 711403692}
+  - {fileID: 703855974}
+  - {fileID: 1119540006}
   m_Father: {fileID: 1030154011}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -8295,7 +8351,7 @@ MonoBehaviour:
     m_Right: 24
     m_Top: 20
     m_Bottom: 20
-  m_ChildAlignment: 1
+  m_ChildAlignment: 0
   m_Spacing: 12
   m_ChildForceExpandWidth: 0
   m_ChildForceExpandHeight: 0
@@ -9517,13 +9573,12 @@ RectTransform:
   m_Children:
   - {fileID: 1432592432}
   - {fileID: 955693799}
-  - {fileID: 241324252}
   m_Father: {fileID: 1253063281}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 44}
+  m_SizeDelta: {x: 0, y: 36}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1489965553
 MonoBehaviour:
@@ -11556,7 +11611,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1844951705
 RectTransform:
   m_ObjectHideFlags: 0
@@ -12040,7 +12095,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: Martingale is Active
+  m_Text: Show Strategy
 --- !u!222 &1912090794
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -13060,7 +13115,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: Show Strategy
+  m_Text: Martingale is Active
 --- !u!222 &2049104751
 CanvasRenderer:
   m_ObjectHideFlags: 0

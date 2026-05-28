@@ -67,6 +67,9 @@ namespace Blackjack
         /// <summary>Guard flag to prevent re-entrant callback processing when programmatically setting toggle values.</summary>
         private bool _suppressToggleCallbacks;
 
+        /// <summary>Last threshold read from the slider; used to detect UI changes without relying on slider callbacks alone.</summary>
+        private int _lastMartingaleThresholdFromSlider = int.MinValue;
+
         // ──────────────────────────────────────────────────────────────────────────
         // Unity lifecycle
         // ──────────────────────────────────────────────────────────────────────────
@@ -79,6 +82,9 @@ namespace Blackjack
             // Cache the CanvasGroup used to show/hide the panel without SetActive.
             if (menuPanel != null)
                 _menuCanvasGroup = menuPanel.GetComponent<CanvasGroup>();
+
+            BindRowToggleReferences();
+            EnsureToggleRowPlacement();
 
             _settings = new OptionsSettings();
 
@@ -138,7 +144,108 @@ namespace Blackjack
 
             if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
                 TryCloseStrategyTable();
+
+            SyncMartingaleThresholdIfSliderChanged();
         }
+
+        /// <summary>Sets toggle state and forces the checkmark graphic to match (fixes Unity UI desync).</summary>
+        private void ApplyMartingaleToggleVisual(Toggle toggle, bool isOn, bool interactable)
+        {
+            if (toggle == null) return;
+
+            toggle.interactable = interactable;
+
+            _suppressToggleCallbacks = true;
+            toggle.SetIsOnWithoutNotify(isOn);
+            _suppressToggleCallbacks = false;
+
+            if (isOn)
+                MartingaleThresholdToggleGate.SyncCheckmark(toggle);
+            else
+                MartingaleThresholdToggleGate.HideCheckmark(toggle);
+        }
+
+        /// <summary>
+        /// Binds toggles by GameObject name so row layout cannot mis-wire Martingale logic.
+        /// </summary>
+        private void BindRowToggleReferences()
+        {
+            showStrategyToggle = FindMenuToggle("ShowStrategyToggle");
+            martingaleActiveToggle = FindMenuToggle("MartingaleActiveToggle");
+            martingaleAutoPlayToggle = FindMenuToggle("MartingaleAutoPlayToggle");
+
+            if (martingaleThresholdSlider == null && menuPanel != null)
+            {
+                foreach (var slider in menuPanel.GetComponentsInChildren<Slider>(true))
+                {
+                    if (slider.name == "MartingaleThresholdSlider")
+                    {
+                        martingaleThresholdSlider = slider;
+                        break;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Ensures each toggle lives on its named row (fixes swapped checkbox placement in the scene).
+        /// </summary>
+        private void EnsureToggleRowPlacement()
+        {
+            ReparentToggleToRow("ShowStrategyToggle", "ShowStrategyRow");
+            ReparentToggleToRow("MartingaleActiveToggle", "MartingaleActiveRow");
+            ReparentToggleToRow("MartingaleAutoPlayToggle", "MartingaleAutoPlayRow");
+        }
+
+        private void ReparentToggleToRow(string toggleName, string rowName)
+        {
+            if (menuPanel == null) return;
+
+            Transform row = null;
+            foreach (Transform child in menuPanel.transform)
+            {
+                if (child.name == rowName)
+                {
+                    row = child;
+                    break;
+                }
+            }
+
+            if (row == null) return;
+
+            var toggle = FindMenuToggle(toggleName);
+            if (toggle == null || toggle.transform.parent == row) return;
+
+            toggle.transform.SetParent(row, false);
+            toggle.transform.SetAsFirstSibling();
+        }
+
+        private Toggle FindMenuToggle(string toggleObjectName)
+        {
+            if (menuPanel == null) return null;
+
+            foreach (var toggle in menuPanel.GetComponentsInChildren<Toggle>(true))
+            {
+                if (toggle.name == toggleObjectName)
+                    return toggle;
+            }
+
+            return null;
+        }
+
+        /// <summary>Show Strategy must never be grayed out by Martingale threshold logic.</summary>
+        private void EnsureShowStrategyToggleUnlocked()
+        {
+            var toggle = FindMenuToggle("ShowStrategyToggle");
+            if (toggle == null) return;
+
+            toggle.interactable = true;
+            MartingaleThresholdToggleGate.SyncCheckmark(toggle);
+        }
+
+        private Toggle GetShowStrategyRowToggle() => FindMenuToggle("ShowStrategyToggle");
+        private Toggle GetMartingaleActiveRowToggle() => FindMenuToggle("MartingaleActiveToggle");
+        private Toggle GetMartingaleAutoPlayRowToggle() => FindMenuToggle("MartingaleAutoPlayToggle");
 
         /// <summary>Toggles the strategy table visibility and keeps the toggle and settings in sync.</summary>
         private void ToggleStrategyTable()
@@ -265,17 +372,24 @@ namespace Blackjack
         {
             if (_suppressToggleCallbacks) return;
 
+            if (value && _settings.martingaleThreshold <= 0)
+            {
+                DeactivateMartingale();
+                return;
+            }
+
             _settings.martingaleActive = value;
 
+            bool thresholdEnabled = ReadMartingaleThresholdFromSlider() > 0;
             if (value)
             {
+                ApplyMartingaleToggleVisual(GetMartingaleActiveRowToggle(), isOn: true, interactable: thresholdEnabled);
                 blackjackGame?.TryStartMartingaleFromToggle();
             }
             else
             {
                 // Deactivating "Martingale is Active" also forces "Martingale automatically plays" off.
-                _settings.martingaleAutoPlay = false;
-                martingaleAutoPlayToggle?.SetIsOnWithoutNotify(false);
+                DeactivateMartingaleAutoPlay();
 
                 blackjackGame?.CancelMartingale();
             }
@@ -285,60 +399,98 @@ namespace Blackjack
         {
             if (_suppressToggleCallbacks) return;
 
+            if (value && _settings.martingaleThreshold <= 0)
+            {
+                DeactivateMartingaleAutoPlay();
+                return;
+            }
+
             _settings.martingaleAutoPlay = value;
+
+            bool thresholdEnabled = ReadMartingaleThresholdFromSlider() > 0;
+            ApplyMartingaleToggleVisual(
+                GetMartingaleAutoPlayRowToggle(),
+                isOn: value,
+                interactable: thresholdEnabled);
+
+            if (value)
+            {
+                ActivateMartingale();
+                blackjackGame?.TryStartMartingaleFromToggle();
+            }
         }
 
-    /// <summary>
-    /// Programmatically checks a toggle without firing its onValueChanged callbacks.
-    /// Works reliably because the affected toggles use ToggleTransition.None, which
-    /// makes SetIsOnWithoutNotify update the checkmark graphic instantly.
-    /// </summary>
-    private void ForceToggleChecked(Toggle toggle)
-        {
-            if (toggle == null) return;
+        /// <summary>Reads the Martingale threshold from the slider when present.</summary>
+        private int ReadMartingaleThresholdFromSlider() =>
+            martingaleThresholdSlider != null
+                ? Mathf.RoundToInt(martingaleThresholdSlider.value)
+                : _settings.martingaleThreshold;
 
-            _suppressToggleCallbacks = true;
-            toggle.SetIsOnWithoutNotify(true);
-            _suppressToggleCallbacks = false;
+        /// <summary>Keeps settings and Martingale toggles in sync with the threshold slider value.</summary>
+        private void SyncMartingaleThresholdFromSlider()
+        {
+            _settings.martingaleThreshold = ReadMartingaleThresholdFromSlider();
+            _lastMartingaleThresholdFromSlider = _settings.martingaleThreshold;
+            ApplyMartingaleThresholdState();
+        }
+
+        /// <summary>
+        /// Applies threshold state when the slider moves but the UnityEvent did not fire
+        /// (e.g. some inspector setups or drag end without callback).
+        /// </summary>
+        private void SyncMartingaleThresholdIfSliderChanged()
+        {
+            if (martingaleThresholdSlider == null) return;
+
+            int sliderThreshold = ReadMartingaleThresholdFromSlider();
+            if (sliderThreshold == _lastMartingaleThresholdFromSlider) return;
+
+            SyncMartingaleThresholdFromSlider();
         }
 
         private void OnShowStrategyToggled(bool value)
         {
             _settings.showStrategyEnabled = value;
+            MartingaleThresholdToggleGate.SyncCheckmark(showStrategyToggle);
             strategyTableUI?.SetVisible(value);
         }
 
-        private void OnMartingaleThresholdChanged(float value)
+        public void OnMartingaleThresholdChanged(float value)
         {
             _settings.martingaleThreshold = Mathf.RoundToInt(value);
+            _lastMartingaleThresholdFromSlider = _settings.martingaleThreshold;
             ApplyMartingaleThresholdState();
         }
 
         /// <summary>Grays out and unchecks the Martingale toggles when the threshold is 0.</summary>
         private void ApplyMartingaleThresholdState()
         {
-            bool enabled = _settings.martingaleThreshold > 0;
+            int threshold = ReadMartingaleThresholdFromSlider();
+            _settings.martingaleThreshold = threshold;
+            _lastMartingaleThresholdFromSlider = threshold;
 
-            if (martingaleActiveToggle != null)
+            var activeToggle = GetMartingaleActiveRowToggle();
+            var autoPlayToggle = GetMartingaleAutoPlayRowToggle();
+            EnsureShowStrategyToggleUnlocked();
+
+            if (threshold <= 0)
             {
-                martingaleActiveToggle.interactable = enabled;
-                if (!enabled)
-                {
-                    martingaleActiveToggle.SetIsOnWithoutNotify(false);
-                    _settings.martingaleActive = false;
-                    blackjackGame?.CancelMartingale();
-                }
+                _settings.martingaleActive   = false;
+                _settings.martingaleAutoPlay = false;
+                ApplyMartingaleToggleVisual(activeToggle, isOn: false, interactable: false);
+                ApplyMartingaleToggleVisual(autoPlayToggle, isOn: false, interactable: false);
+                EnsureShowStrategyToggleUnlocked();
+                blackjackGame?.CancelMartingale();
+                return;
             }
 
-            if (martingaleAutoPlayToggle != null)
-            {
-                martingaleAutoPlayToggle.interactable = enabled;
-                if (!enabled)
-                {
-                    martingaleAutoPlayToggle.SetIsOnWithoutNotify(false);
-                    _settings.martingaleAutoPlay = false;
-                }
-            }
+            _settings.martingaleActive = true;
+            ApplyMartingaleToggleVisual(activeToggle, isOn: true, interactable: true);
+            ApplyMartingaleToggleVisual(
+                autoPlayToggle,
+                isOn: _settings.martingaleAutoPlay,
+                interactable: true);
+            EnsureShowStrategyToggleUnlocked();
         }
 
         /// <summary>Persists the selected test-split rank (2–14, matching the Rank enum).</summary>
@@ -369,10 +521,12 @@ namespace Blackjack
         public int MartingaleThreshold => _settings.martingaleThreshold;
 
         /// <summary>When true, the Martingale suggestion popup is enabled.</summary>
-        public bool IsMartingaleActive => _settings.martingaleActive;
+        public bool IsMartingaleActive =>
+            _settings.martingaleThreshold > 0 && _settings.martingaleActive;
 
         /// <summary>When true, Martingale mode activates and doubles the bet automatically without showing the confirmation popup.</summary>
-        public bool IsMartingaleAutoPlay => _settings.martingaleAutoPlay;
+        public bool IsMartingaleAutoPlay =>
+            _settings.martingaleThreshold > 0 && _settings.martingaleAutoPlay;
 
         /// <summary>
         /// Programmatically activates the "Martingale is Active" checkbox.
@@ -380,10 +534,11 @@ namespace Blackjack
         /// </summary>
         public void ActivateMartingale()
         {
-            if (_settings.martingaleActive) return;
-            _settings.martingaleActive = true;
+            if (ReadMartingaleThresholdFromSlider() <= 0) return;
 
-            ForceToggleChecked(martingaleActiveToggle);
+            _settings.martingaleThreshold = ReadMartingaleThresholdFromSlider();
+            _settings.martingaleActive = true;
+            ApplyMartingaleToggleVisual(GetMartingaleActiveRowToggle(), isOn: true, interactable: true);
         }
 
         /// <summary>
@@ -399,9 +554,16 @@ namespace Blackjack
 
         public void DeactivateMartingale()
         {
-            if (!_settings.martingaleActive) return;
             _settings.martingaleActive = false;
-            martingaleActiveToggle?.SetIsOnWithoutNotify(false);
+            bool interactable = ReadMartingaleThresholdFromSlider() > 0;
+            ApplyMartingaleToggleVisual(GetMartingaleActiveRowToggle(), isOn: false, interactable: interactable);
+        }
+
+        private void DeactivateMartingaleAutoPlay()
+        {
+            _settings.martingaleAutoPlay = false;
+            bool interactable = ReadMartingaleThresholdFromSlider() > 0;
+            ApplyMartingaleToggleVisual(GetMartingaleAutoPlayRowToggle(), isOn: false, interactable: interactable);
         }
 
         /// <summary>When true, the strategy table should be visible to the player.</summary>
@@ -419,8 +581,12 @@ namespace Blackjack
             if (!_menuVisible && blackjackGame != null && !blackjackGame.IsBettingAllowed && !blackjackGame.IsRoundOver)
                 return;
 
+            bool opening = !_menuVisible;
             SetMenuVisible(!_menuVisible);
-            if (!_menuVisible) blackjackGame?.PlayCloseSound();
+            if (opening)
+                SyncMartingaleThresholdFromSlider();
+            else
+                blackjackGame?.PlayCloseSound();
         }
 
         /// <summary>Closes the menu panel if it is currently open.</summary>
@@ -484,16 +650,10 @@ namespace Blackjack
             if (martingaleThresholdSlider != null)
                 martingaleThresholdSlider.SetValueWithoutNotify(_settings.martingaleThreshold);
 
-            if (martingaleActiveToggle != null)
-                martingaleActiveToggle.SetIsOnWithoutNotify(_settings.martingaleActive);
-
-            if (martingaleAutoPlayToggle != null)
-                martingaleAutoPlayToggle.SetIsOnWithoutNotify(_settings.martingaleAutoPlay);
-
             if (testSplitRankSlider != null)
                 testSplitRankSlider.SetValueWithoutNotify(_settings.testSplitRank);
 
-            ApplyMartingaleThresholdState();
+            SyncMartingaleThresholdFromSlider();
         }
 
         // Converts a linear [0,1] slider value to decibels for the AudioMixer.

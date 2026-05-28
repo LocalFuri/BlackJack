@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 namespace Blackjack.UI
@@ -7,6 +8,8 @@ namespace Blackjack.UI
     public class SliderValueDisplay : MonoBehaviour
     {
         [SerializeField] private Text valueLabel;
+
+        [SerializeField] private UnityEvent<float> onValueChanged;
 
         /// <summary>
         /// When enabled, values 11–14 are rendered as face-card labels (J, Q, K, A)
@@ -40,6 +43,8 @@ namespace Blackjack.UI
 
             if (colorThreshold >= 0 && valueLabel != null)
                 valueLabel.color = intValue > colorThreshold ? aboveThresholdColor : defaultColor;
+
+            onValueChanged?.Invoke(value);
         }
 
         private string FormatValue(int intValue)
