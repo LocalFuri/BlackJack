@@ -367,9 +367,44 @@ namespace Blackjack
         /// and refreshes the bet sum label.
         /// </summary>
         /// <param name="playSound">When true, plays <see cref="chipSound"/> after doubling (e.g. for Martingale auto-raise).</param>
-        public void DoubleBetChips(bool playSound = false)
+        /// <param name="enforceMaxBet">
+        /// When true, the resulting bet is clamped to <see cref="MaxBet"/>.
+        /// If the current bet already equals or exceeds <see cref="MaxBet"/>, nothing is added
+        /// and <see cref="BlackjackGame.NotifyBetLimitExceeded"/> is called instead.
+        /// Pass true for player-initiated doubling (e.g. Martingale); leave false for
+        /// game-mechanic doublings such as Double Down and Split.
+        /// </param>
+        public void DoubleBetChips(bool playSound = false, bool enforceMaxBet = false)
         {
             if (_columnOrder.Count == 0) return;
+
+            if (enforceMaxBet)
+            {
+                int currentBet = TotalBet;
+
+                if (currentBet >= maxBet)
+                {
+                    blackjackGame?.NotifyBetLimitExceeded();
+                    return;
+                }
+
+                int doubledBet = currentBet * 2;
+                if (doubledBet > maxBet)
+                {
+                    blackjackGame?.NotifyBetLimitExceeded();
+
+                    int previousBet = currentBet;
+                    RestoreBet(maxBet);
+                    int delta = TotalBet - previousBet;
+                    if (delta != 0)
+                        OnBetChanged?.Invoke(delta);
+
+                    if (playSound && delta > 0)
+                        chipSound.Play(audioSource);
+
+                    return;
+                }
+            }
 
             // Snapshot current state before we add anything.
             var snapshotTypes  = new List<int>(_columnOrder);

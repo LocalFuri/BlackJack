@@ -1,4 +1,4 @@
-//CodeRed Soft 2026-05-244
+//CodeRed Soft 2026-05-27
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -275,7 +275,7 @@ namespace Blackjack
                         if (chipBetting != null)
                         {
                             _betBeforeMartingale = chipBetting.TotalBet;
-                            chipBetting.DoubleBetChips(playSound: true);
+                            chipBetting.DoubleBetChips(playSound: true, enforceMaxBet: true);
                         }
                         _inMartingaleMode = true;
                         menuController?.DisableOverrideStrategy();
@@ -412,7 +412,7 @@ namespace Blackjack
             if (_pendingMartingaleDouble && chipBetting != null)
             {
                 _pendingMartingaleDouble = false;
-                chipBetting.DoubleBetChips(playSound: true);
+                chipBetting.DoubleBetChips(playSound: true, enforceMaxBet: true);
             }
 
      
@@ -530,6 +530,13 @@ namespace Blackjack
             menuController?.CloseMenu();
             EnsureMinimumBet();
             _savedBetBeforeAction = 0;
+
+            // Capture the bet before the round starts so it can be restored on a win.
+            // Martingale paths set _betBeforeMartingale before calling StartNewRound, so only
+            // overwrite it here when it hasn't already been set for this Martingale sequence.
+            if (_betBeforeMartingale <= 0 && chipBetting != null)
+                _betBeforeMartingale = chipBetting.TotalBet;
+
             chipBetting?.SnapshotBet();
             _playerMoney -= CurrentBet;
             RefreshMoneyLabel();
@@ -1347,10 +1354,10 @@ namespace Blackjack
             if (remaining > 0f)
                 yield return new WaitForSeconds(remaining);
 
-            // Reset to minimum bet on any win.
+            // After any win: restore the bet that was placed before this round.
             if (_playerWon && chipBetting != null)
             {
-                chipBetting.ResetToMinimumBet();
+                chipBetting.SetBet(_betBeforeMartingale, playSound: true);
                 chipBetting.SnapshotBet();
                 _betBeforeMartingale = 0;
                 _martingaleWin       = false;

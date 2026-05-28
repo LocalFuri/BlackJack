@@ -2737,7 +2737,7 @@ MonoBehaviour:
     volume: 1
   betSumLabel: {fileID: 1758351381}
   columnSpacing: 110
-  stackOffsetY: 8
+  stackOffsetY: 4
   betChipScale: 1
   chipSize: {x: 90, y: 90}
   chipStartOffsetX: 0
