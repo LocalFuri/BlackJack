@@ -47,6 +47,14 @@ namespace Blackjack.UI
             onValueChanged?.Invoke(value);
         }
 
+        /// <summary>Refreshes the label from the slider without changing the slider value.</summary>
+        public void RefreshFromSlider()
+        {
+            var slider = GetComponent<Slider>();
+            if (slider != null)
+                UpdateLabel(slider.value);
+        }
+
         private string FormatValue(int intValue)
         {
             if (useRankLabels)

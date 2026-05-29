@@ -8,10 +8,13 @@ namespace Blackjack
 {
     /// <summary>
     /// Popup shown when the player deviates from basic strategy.
-    /// Displays the strategy recommendation and lets the player keep their decision or reconsider.
+    /// Displays the strategy recommendation and lets the player follow strategy or override it.
     /// </summary>
     public class StrategyDeviationPopup : MonoBehaviour
     {
+        private const string DoStrategyButtonLabel = "Do Strategy";
+        private const string OverrideButtonLabel       = "Override";
+
         [SerializeField] private TextMeshProUGUI messageLabel;
         [SerializeField] private Button keepButton;
         [SerializeField] private Button reconsiderButton;
@@ -29,13 +32,29 @@ namespace Blackjack
         {
             keepButton.onClick.AddListener(OnKeepClicked);
             reconsiderButton.onClick.AddListener(OnReconsiderClicked);
+            ApplyButtonLabels();
             gameObject.SetActive(false);
+        }
+
+        private void ApplyButtonLabels()
+        {
+            SetButtonLabel(keepButton, DoStrategyButtonLabel);
+            SetButtonLabel(reconsiderButton, OverrideButtonLabel);
+        }
+
+        private static void SetButtonLabel(Button button, string label)
+        {
+            if (button == null) return;
+
+            var text = button.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (text != null)
+                text.text = label;
         }
 
         /// <summary>
         /// Shows the popup with the strategy recommendation.
-        /// <paramref name="onKeep"/> executes the player's original action.
-        /// <paramref name="onReconsider"/> closes the popup and returns control to the player.
+        /// <paramref name="onKeep"/> executes the recommended strategy action.
+        /// <paramref name="onReconsider"/> executes the player's chosen action instead of the recommendation.
         /// </summary>
         public void Show(string recommendation, Action onKeep, Action onReconsider)
         {

@@ -128,6 +128,23 @@ namespace Blackjack.UI
             gameObject.SetActive(visible);
         }
 
+        /// <summary>True when <paramref name="screenPosition"/> is over this table's RectTransform.</summary>
+        public bool ContainsScreenPoint(Vector2 screenPosition)
+        {
+            EnsureBuilt();
+
+            var rectTransform = transform as RectTransform;
+            if (rectTransform == null) return false;
+
+            Camera eventCamera = null;
+            var canvas = GetComponentInParent<Canvas>(true);
+            if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                eventCamera = canvas.worldCamera;
+
+            return RectTransformUtility.RectangleContainsScreenPoint(
+                rectTransform, screenPosition, eventCamera);
+        }
+
         /// <summary>Highlights the strategy cell for the current hand state.</summary>
         public void HighlightRecommendation(Hand hand, CardData dealerUpcard,
                                             bool canSplit, bool canDouble, bool canSurrender)

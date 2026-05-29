@@ -1,8 +1,9 @@
 namespace Blackjack
 {
     /// <summary>
-    /// Plain in-memory data container for all options menu settings.
-    /// Values live only for the duration of the session.
+    /// Plain data container for all options menu settings.
+    /// Serialized to <c>options.json</c>. In a built .exe this file is written next to the
+    /// executable when that folder is writable; otherwise it is stored under AppData.
     /// </summary>
     public class OptionsSettings
     {

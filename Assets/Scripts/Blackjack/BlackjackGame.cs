@@ -1,4 +1,4 @@
-//CodeRed Soft 2026-05-27
+//CodeRed Soft 2026-05-28
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -409,17 +409,19 @@ namespace Blackjack
             }
 
             // If the player lost while in Martingale mode, double the bet for the next round.
+            bool martingaleBetLimitExceeded = false;
             if (_pendingMartingaleDouble && chipBetting != null)
             {
                 _pendingMartingaleDouble = false;
-                chipBetting.DoubleBetChips(playSound: true, enforceMaxBet: true);
+                martingaleBetLimitExceeded = !chipBetting.DoubleBetChips(playSound: true, enforceMaxBet: true);
             }
 
      
             StopAllScorePulses();
             ResetPlayerScoreLabelPosition();
             SetScoreLabelsVisible(false);
-            SetStatus("Place your bet");
+            if (!martingaleBetLimitExceeded)
+                SetStatus("Place your bet");
 
             _state = GameState.Idle;
         }
@@ -638,8 +640,7 @@ namespace Blackjack
         /// <summary>
         /// Evaluates <paramref name="chosenAction"/> against basic strategy.
         /// Correct actions execute immediately. Deviations show the popup:
-        /// "Keep decision" executes the player's choice; "Reconsider" closes the popup
-        /// and returns button control so the player can choose again.
+        /// "Do Strategy" executes the recommended action; "Override" executes the player's chosen action.
         /// </summary>
         private void ConfirmOrExecute(PlayerAction chosenAction, Action executeChosen)
         {
@@ -653,10 +654,33 @@ namespace Blackjack
                 return;
             }
 
+            StrategyAction recommendation = evaluation.Recommendation;
             deviationPopup.Show(
-                recommendation: evaluation.Recommendation.ToString(),
-                onKeep:         executeChosen,
-                onReconsider:   null);
+                recommendation: recommendation.ToString(),
+                onKeep:         () => ExecuteRecommendedAction(recommendation),
+                onReconsider:   executeChosen);
+        }
+
+        private void ExecuteRecommendedAction(StrategyAction recommendation)
+        {
+            switch (recommendation)
+            {
+                case StrategyAction.Hit:
+                    StartCoroutine(PlayerHit());
+                    break;
+                case StrategyAction.Stand:
+                    StartCoroutine(AdvanceOrDealerTurn());
+                    break;
+                case StrategyAction.Double:
+                    StartCoroutine(PerformDoubleDown());
+                    break;
+                case StrategyAction.Split:
+                    ExecuteSplit();
+                    break;
+                case StrategyAction.Surrender:
+                    StartCoroutine(PlayerSurrender());
+                    break;
+            }
         }
 
         /// <summary>Forces the next deal to give the player a natural blackjack, then starts the round.</summary>
@@ -786,7 +810,7 @@ namespace Blackjack
                         SpawnFireworks(PlayNaturalBlackjackSound());
                         RecordRoundOutcome(false, scoreDelta: +1);
                         _playerWon = true;
-                        SetStatus(_martingaleWin ? "Won during Martingale" : "You win", WinColor);
+                        SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);
                         ApplyPayout(PayoutResult.BlackjackWin, CurrentBet);
                     }
                 }
@@ -1087,6 +1111,10 @@ namespace Blackjack
 
             if (!IsBettingAllowed) return;
 
+            // Keep the bet-limit warning visible after Martingale doubling clamps to the cap.
+            if (statusLabel != null && statusLabel.text == "Limit Exceeded")
+                return;
+
             if (CurrentBet == 0)
             {
                 SetStatus("Place your bet");
@@ -1311,9 +1339,9 @@ namespace Blackjack
                 // For wins, pay out based on what is visible in the bet area only (CurrentBet).
                 // On a double-down CurrentBet already equals twice the original stake.
                 int winBet = CurrentBet;
-                if      (p == BlackjackValue)    { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won during Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
-                else if (dealerBust)             { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won during Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
-                else if (p > dealerScore)        { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won during Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
+                if      (p == BlackjackValue)    { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
+                else if (dealerBust)             { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
+                else if (p > dealerScore)        { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
                 else if (dealerScore > p)        { PlayLoseSound(); RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1);  SetStatus($"You lose",LoseColor); ApplyPayout(PayoutResult.Lose, totalBet); }
                 else
                 {

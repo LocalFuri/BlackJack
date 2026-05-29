@@ -260,7 +260,7 @@ namespace Blackjack
         /// <summary>
         /// Rebuilds the bet area to represent exactly <paramref name="targetAmount"/> and fires
         /// <see cref="OnBetChanged"/> with the signed delta so all listeners (money label, status)
-        /// stay in sync. Use this for programmatic bet changes during the betting phase.
+        /// stay in sync. Use this for programmatic bet changes d uring the betting phase.
         /// </summary>
         /// <summary>
         /// Rebuilds the bet area to represent exactly <paramref name="targetAmount"/> and fires
@@ -374,9 +374,10 @@ namespace Blackjack
         /// Pass true for player-initiated doubling (e.g. Martingale); leave false for
         /// game-mechanic doublings such as Double Down and Split.
         /// </param>
-        public void DoubleBetChips(bool playSound = false, bool enforceMaxBet = false)
+        /// <returns>False when <paramref name="enforceMaxBet"/> is true and the bet limit was reached.</returns>
+        public bool DoubleBetChips(bool playSound = false, bool enforceMaxBet = false)
         {
-            if (_columnOrder.Count == 0) return;
+            if (_columnOrder.Count == 0) return true;
 
             if (enforceMaxBet)
             {
@@ -385,7 +386,7 @@ namespace Blackjack
                 if (currentBet >= maxBet)
                 {
                     blackjackGame?.NotifyBetLimitExceeded();
-                    return;
+                    return false;
                 }
 
                 int doubledBet = currentBet * 2;
@@ -402,7 +403,7 @@ namespace Blackjack
                     if (playSound && delta > 0)
                         chipSound.Play(audioSource);
 
-                    return;
+                    return false;
                 }
             }
 
@@ -430,6 +431,7 @@ namespace Blackjack
                 chipSound.Play(audioSource);
 
             RefreshBetLabel();
+            return true;
         }
 
         /// <summary>Removes all chips from the bet area and resets state.</summary>

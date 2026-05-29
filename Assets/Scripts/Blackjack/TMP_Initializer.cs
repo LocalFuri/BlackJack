@@ -7,7 +7,7 @@ namespace Blackjack
     /// Forces TextMeshPro's default font asset to initialize its internal material reference
     /// before the Canvas flushes its first rebuild queue on frame 0.
     ///
-    /// Without this, TMP_FontAsset.material can be null during the very first
+    /// Without this, TMP_FontAsset.material can be null d uring the very first
     /// OnPreRenderCanvas pass, causing a NullReferenceException inside
     /// MaterialReference..ctor at MaterialReferenceManager.cs:525.
     /// </summary>
