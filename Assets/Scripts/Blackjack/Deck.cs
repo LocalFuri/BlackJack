@@ -69,6 +69,18 @@ namespace Blackjack
         }
 
         /// <summary>
+        /// Manipulates the top of the deck so the dealer receives a natural blackjack
+        /// and the player does not. Deal order: player1, dealer1, player2, dealer2.
+        /// </summary>
+        public void ForceDealerBlackjack()
+        {
+            PlaceAtIndex(new CardData(Suit.Spades,   Rank.Five), _cards.Count - 1); // player card 1
+            PlaceAtIndex(new CardData(Suit.Diamonds, Rank.Ace),  _cards.Count - 2); // dealer card 1
+            PlaceAtIndex(new CardData(Suit.Hearts,   Rank.Six),  _cards.Count - 3); // player card 2
+            PlaceAtIndex(new CardData(Suit.Clubs,    Rank.King), _cards.Count - 4); // dealer card 2
+        }
+
+        /// <summary>
         /// Manipulates the top of the deck so the player's first two cards
         /// will be Five of Spades and Five of Hearts — ideal for testing split.
         /// </summary>

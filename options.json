@@ -1,0 +1,14 @@
+{
+    "blackjackTestEnabled": true,
+    "bjAllEnabled": true,
+    "ddTestEnabled": true,
+    "testSplitEnabled": true,
+    "testSplitRank": 2,
+    "overrideStrategyEnabled": false,
+    "alwaysLoseEnabled": false,
+    "volume": 1.0,
+    "martingaleThreshold": 1,
+    "martingaleActive": true,
+    "martingaleAutoPlay": false,
+    "showStrategyEnabled": false
+}

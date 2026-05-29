@@ -1,4 +1,4 @@
-//CodeRed Soft 2026-05-28
+//CodeRed Soft 2026-05-29
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -98,7 +98,9 @@ namespace Blackjack
 
     private SoundEntry? _lastDoubleBJSound;
     private bool _doubleBJSoundPlaying;
+    private bool _dealerNaturalBJPlaying;
     private float _fireworksEndTime;
+    private float _dealerNaturalBJEndTime;
 
         [Header("Timing")]
 
@@ -146,12 +148,13 @@ namespace Blackjack
         private bool _forceBothBlackjack;
         private bool _forceSplitHand;
         private bool _forceDoubleDownTest;
+        private bool _forceDealerBlackjack;
         private bool _isSplitRound;
         private int  _activeHandIndex; // 0 = player, 1 = split
 
         private int _doubleDownExtraBet; // extra bet deducted when doubling down
         private int _savedBetBeforeAction; // bet amount before split/double-down, restored next round
-        private int _betBeforeMartingale;  // snapshot of bet before Martingale (kept for reference; win always resets to minimum)
+        private int _betBeforeMartingale;  // bet placed before Martingale doubling; restored on a Martingale win
 
         // Snapshot of the dealer's visible upcard taken at the start of the player's turn.
         private CardData _dealerUpcardSnapshot;
@@ -240,10 +243,28 @@ namespace Blackjack
         }
 
         /// <summary>
-        /// Shows the Martingale popup (or activates auto-play silently).
-        /// Called from EndRound when the threshold is reached, and from TryStartMartingaleFromToggle
-        /// when the checkbox is enabled while already in RoundOver with enough losses.
+        /// Arms Martingale after the player confirms the popup, then starts the next round
+        /// (bet is doubled in <see cref="PrepareForBetting"/>).
         /// </summary>
+        private void EnterMartingaleFromPopupConfirm()
+        {
+            if (AlwaysLose)
+            {
+                AlwaysLose = false;
+                OnAlwaysLoseDisabled?.Invoke();
+            }
+
+            if (chipBetting != null && _betBeforeMartingale <= 0)
+                _betBeforeMartingale = chipBetting.TotalBet;
+
+            _inMartingaleMode        = true;
+            _pendingMartingaleDouble = true;
+            menuController?.DisableOverrideStrategy();
+            menuController?.ActivateMartingale();
+            RefreshStreakLabel();
+            OnDeal();
+        }
+
         private void ShowMartingalePopup()
         {
             Debug.Log($"[Martingale] ShowMartingalePopup: autoPlay={menuController?.IsMartingaleAutoPlay} popupNull={martingalePopup == null}");
@@ -265,23 +286,7 @@ namespace Blackjack
             {
                 martingalePopup.Show(
                     "Play Martingale ?",
-                    onDoIt: () =>
-                    {
-                        if (AlwaysLose)
-                        {
-                            AlwaysLose = false;
-                            OnAlwaysLoseDisabled?.Invoke();
-                        }
-                        if (chipBetting != null)
-                        {
-                            _betBeforeMartingale = chipBetting.TotalBet;
-                            chipBetting.DoubleBetChips(playSound: true, enforceMaxBet: true);
-                        }
-                        _inMartingaleMode = true;
-                        menuController?.DisableOverrideStrategy();
-                        RefreshStreakLabel();
-                        StartNewRound();
-                    },
+                    onDoIt: EnterMartingaleFromPopupConfirm,
                     onReconsider: () =>
                     {
                         _inMartingaleMode   = false;
@@ -412,15 +417,21 @@ namespace Blackjack
             bool martingaleBetLimitExceeded = false;
             if (_pendingMartingaleDouble && chipBetting != null)
             {
+                if (_betBeforeMartingale <= 0)
+                    _betBeforeMartingale = chipBetting.TotalBet;
+
                 _pendingMartingaleDouble = false;
-                martingaleBetLimitExceeded = !chipBetting.DoubleBetChips(playSound: true, enforceMaxBet: true);
+                martingaleBetLimitExceeded = !chipBetting.DoubleBetChips(
+                    playSound: false, enforceMaxBet: true, notifyLimitExceeded: false);
             }
 
      
             StopAllScorePulses();
             ResetPlayerScoreLabelPosition();
             SetScoreLabelsVisible(false);
-            if (!martingaleBetLimitExceeded)
+            if (martingaleBetLimitExceeded)
+                NotifyBetLimitExceeded();
+            else
                 SetStatus("Place your bet");
 
             _state = GameState.Idle;
@@ -480,16 +491,43 @@ namespace Blackjack
         }
 
         /// <summary>
-        /// Sets the status label to "Limit Exceeded" in LoseColor and plays the knock sound.
+        /// Pulses <see cref="BetLimitStatusMessage"/> three times, then keeps it visible until the next round is dealt.
         /// </summary>
         public void NotifyBetLimitExceeded()
         {
+            if (_betLimitStatusLocked || IsLimitPulsing) return;
+
             knockSound.Play(audioSource);
-            SetStatus("Limit Exceeded", LoseColor);
+            StartCoroutine(PulseLimitExceeded());
         }
 
-        /// <summary>True while the "Limit exceeded!" pulse animation is running. All input should be suppressed during this window.</summary>
+        private const int LimitPulseCount = 3;
+        private const float LimitPulseDelay = 0.5f;
+        private const string BetLimitStatusMessage = "Exceeding Limit, setting to Max";
+        private bool _betLimitStatusLocked;
+
+        /// <summary>True while the bet-limit pulse animation is running.</summary>
         public bool IsLimitPulsing { get; private set; }
+
+        /// <summary>True while the bet-limit pulse is running or its message is locked until the next deal.</summary>
+        public bool IsBetLimitStatusActive => IsLimitPulsing || _betLimitStatusLocked;
+
+        private IEnumerator PulseLimitExceeded()
+        {
+            IsLimitPulsing = true;
+
+            for (int i = 0; i < LimitPulseCount; i++)
+            {
+                SetStatus(BetLimitStatusMessage, LoseColor);
+                yield return new WaitForSeconds(LimitPulseDelay);
+                SetStatus(string.Empty, LoseColor);
+                yield return new WaitForSeconds(LimitPulseDelay);
+            }
+
+            SetStatus(BetLimitStatusMessage, LoseColor);
+            IsLimitPulsing = false;
+            _betLimitStatusLocked = true;
+        }
 
         // ──────────────────────────────────────────────────────────────────────────
         // Input
@@ -513,6 +551,8 @@ namespace Blackjack
         /// <summary>Starts a new round. Ensures a minimum bet of 1 chip and deducts the total bet from the player's balance.</summary>
         public void OnDeal()
         {
+            if (IsLimitPulsing) return;
+            if (_dealerNaturalBJPlaying) return;
             if (_state != GameState.Idle && _state != GameState.RoundOver) return;
             StopBlackjackCelebration();
             StartNewRound();
@@ -526,18 +566,28 @@ namespace Blackjack
         {
             if (_doubleBJSoundPlaying) return;
             StopAllCoroutines();
+            IsLimitPulsing = false;
+            _dealerNaturalBJPlaying = false;
+            _dealerNaturalBJEndTime = 0f;
+
+            // EndRound may have been interrupted before it could reset the bet after a win.
+            ApplyPendingWinBetRestore();
+
             _martingaleWin = false;
             _playerWon = false;
             dealButton.gameObject.SetActive(false);
             menuController?.CloseMenu();
-            EnsureMinimumBet();
             _savedBetBeforeAction = 0;
+            EnsureMinimumBet();
 
-            // Capture the bet before the round starts so it can be restored on a win.
-            // Martingale paths set _betBeforeMartingale before calling StartNewRound, so only
-            // overwrite it here when it hasn't already been set for this Martingale sequence.
-            if (_betBeforeMartingale <= 0 && chipBetting != null)
-                _betBeforeMartingale = chipBetting.TotalBet;
+            // Martingale doubling may have hit the bet cap — let the limit pulse finish first.
+            if (IsLimitPulsing)
+            {
+                dealButton.gameObject.SetActive(true);
+                return;
+            }
+
+            _betLimitStatusLocked = false;
 
             chipBetting?.SnapshotBet();
             _playerMoney -= CurrentBet;
@@ -554,7 +604,13 @@ namespace Blackjack
             if (chipBetting == null) return;
 
             if (_state == GameState.RoundOver)
+            {
+                // Capture the pre-double stake before Martingale raises the bet for the next round.
+                if (_pendingMartingaleDouble && _betBeforeMartingale <= 0)
+                    _betBeforeMartingale = chipBetting.TotalBet;
+
                 PrepareForBetting();
+            }
 
             if (chipBetting.TotalBet <= 0)
                 chipBetting.PlaceSmallestChip();
@@ -716,6 +772,21 @@ namespace Blackjack
             StartNewRound();
         }
 
+        /// <summary>Forces the next deal to give the dealer a natural blackjack, then starts the round.</summary>
+        public void OnDealerBlackjackTest()
+        {
+            if (_state != GameState.Idle && _state != GameState.RoundOver) return;
+            StopBlackjackCelebration();
+            DeactivateTestCheckboxes();
+            _forceBothBlackjack   = false;
+            _forcePlayerBlackjack = false;
+            _forceSplitHand       = false;
+            _forceDoubleDownTest  = false;
+            _state                = GameState.Idle;
+            _forceDealerBlackjack = true;
+            StartNewRound();
+        }
+
         /// <summary>Forces the next deal to give the player a hard-11 two-card hand (random pair, e.g. 5+6 or 4+7), then starts the round.</summary>
         public void OnDoubleDownTest()
         {
@@ -752,6 +823,7 @@ namespace Blackjack
                 _forceSplitHand = false;
             }
             if (_forceDoubleDownTest)  { _deck.ForceDoubleDownTest();  _forceDoubleDownTest  = false; }
+            if (_forceDealerBlackjack) { _deck.ForceDealerBlackjack(); _forceDealerBlackjack = false; }
 
             ClearTable();
             SetStatus("");
@@ -767,55 +839,63 @@ namespace Blackjack
             _dealerHoleCardView = _dealerCardViews[^1];
             UpdateScoreLabels(revealDealer: false);
 
-            // ── Natural blackjack check ──
-            bool playerBJ = _playerHand.IsBlackjack();
-            bool dealerBJ = _dealerHand.IsBlackjack();
+            // ── Natural blackjack check (both dealer cards are already in the hand) ──
+            bool playerNatural = IsNaturalBlackjack(_playerHand);
+            bool dealerNatural = IsNaturalBlackjack(_dealerHand);
 
-            if (playerBJ || dealerBJ)
+            if (playerNatural && dealerNatural)
             {
-                yield return StartCoroutine(RevealHoleCard());
-                UpdateScoreLabels(revealDealer: true);
+                yield return StartCoroutine(RevealDealerHoleForNaturalBlackjack());
 
-                if (playerBJ && dealerBJ)
+                if (AlwaysLose)
                 {
-                    if (AlwaysLose)
-                    {
-                        // Always Lose: treat double-BJ push as a loss.
-                        PlayLoseSound();
-                        RecordRoundOutcome(true, lostAmount: CurrentBet, scoreDelta: -1);
-                        SetStatus("You lose", LoseColor);
-                        ApplyPayout(PayoutResult.Lose, CurrentBet);
-                    }
-                    else
-                    {
-                        StartCoroutine(PlayDoubleBJSoundRoutine());
-                        RecordRoundOutcome(false, scoreDelta: 0, isPush: true);
-                        SetStatus("Push", PushColor);
-                        ApplyPayout(PayoutResult.Push, CurrentBet);
-                    }
+                    // Always Lose: treat double-BJ push as a loss.
+                    PlayLoseSound();
+                    RecordRoundOutcome(true, lostAmount: CurrentBet, scoreDelta: -1);
+                    SetStatus("You lose", LoseColor);
+                    ApplyPayout(PayoutResult.Lose, CurrentBet);
                 }
-                else if (playerBJ)
+                else
                 {
-                    if (AlwaysLose)
-                    {
-                        // Always Lose: treat a natural blackjack as a loss.
-                        PlayLoseSound();
-                        RecordRoundOutcome(true, lostAmount: CurrentBet, scoreDelta: -1);
-                        SetStatus("You lose", LoseColor);
-                        ApplyPayout(PayoutResult.Lose, CurrentBet);
-                    }
-                    else
-                    {
-                        ApplyBlackjackGlow();
-                        SpawnFireworks(PlayNaturalBlackjackSound());
-                        RecordRoundOutcome(false, scoreDelta: +1);
-                        _playerWon = true;
-                        SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);
-                        ApplyPayout(PayoutResult.BlackjackWin, CurrentBet);
-                    }
+                    StartCoroutine(PlayDoubleBJSoundRoutine());
+                    RecordRoundOutcome(false, scoreDelta: 0, isPush: true);
+                    SetStatus("Push", PushColor);
+                    ApplyPayout(PayoutResult.Push, CurrentBet);
                 }
-                else                       { PlayLoseSound(); RecordRoundOutcome(true, lostAmount: CurrentBet, scoreDelta: -1); SetStatus("You lose", LoseColor); ApplyPayout(PayoutResult.Lose, CurrentBet); }
 
+                yield return StartCoroutine(EndRound());
+                yield break;
+            }
+
+            if (playerNatural)
+            {
+                yield return StartCoroutine(RevealDealerHoleForNaturalBlackjack());
+
+                if (AlwaysLose)
+                {
+                    // Always Lose: treat a natural blackjack as a loss.
+                    PlayLoseSound();
+                    RecordRoundOutcome(true, lostAmount: CurrentBet, scoreDelta: -1);
+                    SetStatus("You lose", LoseColor);
+                    ApplyPayout(PayoutResult.Lose, CurrentBet);
+                }
+                else
+                {
+                    ApplyBlackjackGlow();
+                    SpawnFireworks(PlayNaturalBlackjackSound());
+                    RecordRoundOutcome(false, scoreDelta: +1);
+                    _playerWon = true;
+                    SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);
+                    ApplyPayout(PayoutResult.BlackjackWin, CurrentBet);
+                }
+
+                yield return StartCoroutine(EndRound());
+                yield break;
+            }
+
+            if (dealerNatural)
+            {
+                yield return StartCoroutine(ApplyDealerNaturalBlackjackLossRoutine(CurrentBet, revealHole: true));
                 yield return StartCoroutine(EndRound());
                 yield break;
             }
@@ -944,6 +1024,15 @@ namespace Blackjack
             {
                 yield return StartCoroutine(RevealHoleCard());
                 UpdateScoreLabels(revealDealer: true);
+                if (IsDealerNaturalBlackjackLoss(_playerHand))
+                {
+                    yield return StartCoroutine(
+                        ApplyDealerNaturalBlackjackLossRoutine(CurrentBet + _doubleDownExtraBet));
+                    SetStatus("Busted");
+                    yield return StartCoroutine(EndRound());
+                    yield break;
+                }
+
                 PlayLoseSound();
                 RecordRoundOutcome(true, lostAmount: CurrentBet + _doubleDownExtraBet, scoreDelta: -1);
                 SetStatus($"Busted");
@@ -1027,6 +1116,9 @@ namespace Blackjack
                 {
                     RecordRoundOutcome(true, lostAmount: CurrentBet, scoreDelta: -1);
                     yield return StartCoroutine(RevealHoleCard());
+                    UpdateScoreLabels(revealDealer: true);
+                    if (IsDealerNaturalBlackjackLoss(_playerHand))
+                        yield return StartCoroutine(ApplyDealerNaturalBlackjackPresentationRoutine());
                     yield return StartCoroutine(EndRound());
                 }
                 yield break;
@@ -1062,6 +1154,14 @@ namespace Blackjack
 
             yield return StartCoroutine(RevealHoleCard());
             UpdateScoreLabels(revealDealer: true);
+
+            if (IsDealerNaturalBlackjackLoss(_playerHand))
+            {
+                yield return StartCoroutine(
+                    ApplyDealerNaturalBlackjackLossRoutine(CurrentBet + _doubleDownExtraBet));
+                yield return StartCoroutine(EndRound());
+                yield break;
+            }
 
             // If both split hands busted, skip dealer drawing.
             bool allPlayerHandsBusted = _isSplitRound
@@ -1111,9 +1211,7 @@ namespace Blackjack
 
             if (!IsBettingAllowed) return;
 
-            // Keep the bet-limit warning visible after Martingale doubling clamps to the cap.
-            if (statusLabel != null && statusLabel.text == "Limit Exceeded")
-                return;
+            if (IsLimitPulsing || _betLimitStatusLocked) return;
 
             if (CurrentBet == 0)
             {
@@ -1251,6 +1349,12 @@ namespace Blackjack
 
         private IEnumerator ResolveRound()
         {
+            if (IsNaturalBlackjack(_dealerHand))
+            {
+                yield return StartCoroutine(ResolveDealerNaturalBlackjackRound());
+                yield break;
+            }
+
             int dealerScore = _dealerHand.BestValue();
             bool dealerBust = dealerScore > BlackjackValue;
 
@@ -1339,10 +1443,10 @@ namespace Blackjack
                 // For wins, pay out based on what is visible in the bet area only (CurrentBet).
                 // On a double-down CurrentBet already equals twice the original stake.
                 int winBet = CurrentBet;
-                if      (p == BlackjackValue)    { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
-                else if (dealerBust)             { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
-                else if (p > dealerScore)        { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
-                else if (dealerScore > p)        { PlayLoseSound(); RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1);  SetStatus($"You lose",LoseColor); ApplyPayout(PayoutResult.Lose, totalBet); }
+                if      (IsNaturalBlackjack(_playerHand)) { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.BlackjackWin, winBet); }
+                else if (dealerBust)                    { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
+                else if (p > dealerScore)               { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
+                else if (dealerScore > p)               { PlayLoseSound(); RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1);  SetStatus($"You lose",LoseColor); ApplyPayout(PayoutResult.Lose, totalBet); }
                 else
                 {
                     if (AlwaysLose)
@@ -1366,33 +1470,53 @@ namespace Blackjack
             yield return StartCoroutine(EndRound());
         }
 
+        /// <summary>
+        /// After a win in Martingale mode, resets the bet area to the stake from before Martingale began.
+        /// Returns true when the bet was restored.
+        /// </summary>
+        private bool ApplyPendingWinBetRestore()
+        {
+            if (!_martingaleWin || chipBetting == null)
+                return false;
+
+            int targetBet = _betBeforeMartingale > 0
+                ? _betBeforeMartingale
+                : chipBetting.SmallestChipValue;
+
+            chipBetting.SetBet(targetBet, playSound: true);
+            chipBetting.SnapshotBet();
+            _betBeforeMartingale = 0;
+            _martingaleWin       = false;
+            _playerWon           = false;
+            return true;
+        }
+
         private IEnumerator EndRound()
         {
             _state = GameState.RoundOver;
             SetButtonState(dealEnabled: false, actionEnabled: false, splitEnabled: false);
             strategyTableUI?.ClearHighlight();
+
+            bool restoredPreMartingaleBet = ApplyPendingWinBetRestore();
+
             yield return new WaitForSeconds(endRoundDelay);
             chipBetting?.ResetMaxBet();
             chipBetting?.ClampBetToMaxBet();
-            chipBetting?.RestoreBetFromSnapshot();
 
-            // If fireworks are still playing, wait for them to finish before
+            if (!restoredPreMartingaleBet)
+                chipBetting?.RestoreBetFromSnapshot();
+
+            // If fireworks or dealer natural-blackjack presentation is still playing, wait before
             // letting the player interact again.
             float remaining = _fireworksEndTime - Time.time;
             if (remaining > 0f)
                 yield return new WaitForSeconds(remaining);
 
-            // After any win: restore the bet that was placed before this round.
-            if (_playerWon && chipBetting != null)
-            {
-                chipBetting.SetBet(_betBeforeMartingale, playSound: true);
-                chipBetting.SnapshotBet();
-                _betBeforeMartingale = 0;
-                _martingaleWin       = false;
-                _playerWon           = false;
-            }
+            remaining = _dealerNaturalBJEndTime - Time.time;
+            if (remaining > 0f)
+                yield return new WaitForSeconds(remaining);
 
-            if (!_doubleBJSoundPlaying && _state == GameState.RoundOver)
+            if (!_doubleBJSoundPlaying && !_dealerNaturalBJPlaying && _state == GameState.RoundOver)
                 SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
 
             // Show Martingale popup immediately when the threshold was just reached.
@@ -1454,6 +1578,12 @@ namespace Blackjack
         // Hole Card
         // ──────────────────────────────────────────────────────────────────────────
 
+        private IEnumerator RevealDealerHoleForNaturalBlackjack()
+        {
+            yield return StartCoroutine(RevealHoleCard());
+            UpdateScoreLabels(revealDealer: true);
+        }
+
         private IEnumerator RevealHoleCard()
         {
             if (_dealerHoleCardView == null || _dealerHoleCardView.IsFaceUp)
@@ -1468,20 +1598,149 @@ namespace Blackjack
         // Glow Effect
         // ──────────────────────────────────────────────────────────────────────────
 
-        private void ApplyBlackjackGlow()
+        private static bool IsNaturalBlackjack(Hand hand)
         {
-            foreach (CardView v in _playerCardViews)
-                v.StartGlowPulse();
+            if (hand.Cards.Count != 2) return false;
+
+            bool hasAce = false;
+            bool hasTenValue = false;
+            foreach (CardData card in hand.Cards)
+            {
+                if (card.Rank == Rank.Ace) hasAce = true;
+                else if (card.BlackjackValue == 10) hasTenValue = true;
+            }
+
+            return hasAce && hasTenValue;
+        }
+
+        private bool IsDealerNaturalBlackjackLoss(Hand playerHand) =>
+            IsNaturalBlackjack(_dealerHand) && !IsNaturalBlackjack(playerHand);
+
+        private IEnumerator ResolveDealerNaturalBlackjackRound()
+        {
+            yield return StartCoroutine(RevealDealerHoleForNaturalBlackjack());
+
+            int totalBet = CurrentBet + _doubleDownExtraBet;
+
+            if (_isSplitRound)
+            {
+                var    results   = new List<string>();
+                int    lostAmount = 0;
+                Hand[] hands     = { _playerHand, _splitHand };
+                string[] labels  = { "Hand 1", "Hand 2" };
+                int handBet = CurrentBet / 2;
+
+                for (int i = 0; i < hands.Length; i++)
+                {
+                    if (IsNaturalBlackjack(hands[i]))
+                    {
+                        results.Add(ColorizeText($"{labels[i]}: Push", PushColor));
+                        ApplyPayout(PayoutResult.Push, handBet);
+                    }
+                    else
+                    {
+                        results.Add(ColorizeText($"{labels[i]}: Lose", LoseColor));
+                        lostAmount += handBet;
+                        ApplyPayout(PayoutResult.Lose, handBet);
+                    }
+                }
+
+                RecordRoundOutcome(
+                    isLoss: lostAmount > 0,
+                    lostAmount: lostAmount,
+                    scoreDelta: lostAmount > 0 ? -1 : 0,
+                    isPush: lostAmount == 0);
+                SetStatus(string.Join("  |  ", results));
+                yield return StartCoroutine(ApplyDealerNaturalBlackjackPresentationRoutine());
+            }
+            else if (IsNaturalBlackjack(_playerHand))
+            {
+                if (AlwaysLose)
+                {
+                    yield return StartCoroutine(ApplyDealerNaturalBlackjackLossRoutine(totalBet));
+                }
+                else
+                {
+                    StartCoroutine(PlayDoubleBJSoundRoutine());
+                    RecordRoundOutcome(false, scoreDelta: 0, isPush: true);
+                    SetStatus("Push", PushColor);
+                    ApplyPayout(PayoutResult.Push, CurrentBet);
+                }
+            }
+            else
+            {
+                yield return StartCoroutine(ApplyDealerNaturalBlackjackLossRoutine(totalBet));
+            }
+
+            yield return StartCoroutine(EndRound());
+        }
+
+        /// <summary>
+        /// Reveals the hole if needed, plays dealer card bloom + lose/damnit sounds, records the loss, and waits for the presentation to finish.
+        /// </summary>
+        private IEnumerator ApplyDealerNaturalBlackjackLossRoutine(int lostAmount, bool revealHole = false)
+        {
+            _dealerNaturalBJPlaying = true;
+
+            if (revealHole)
+                yield return StartCoroutine(RevealDealerHoleForNaturalBlackjack());
+
+            ApplyBlackjackGlow(_dealerCardViews);
+            float glowDuration = PlayDealerBlackjackLoseSound();
+            _dealerNaturalBJEndTime = Time.time + glowDuration;
+
+            RecordRoundOutcome(true, lostAmount: lostAmount, scoreDelta: -1);
+            SetStatus("You lose", LoseColor);
+            ApplyPayout(PayoutResult.Lose, lostAmount);
+
+            yield return new WaitForSeconds(glowDuration);
+            StopBlackjackGlow(_dealerCardViews);
+            _dealerNaturalBJPlaying = false;
+            _dealerNaturalBJEndTime = 0f;
+        }
+
+        /// <summary>Bloom + lose/damnit sounds only; caller handles payout/outcome.</summary>
+        private IEnumerator ApplyDealerNaturalBlackjackPresentationRoutine()
+        {
+            _dealerNaturalBJPlaying = true;
+
+            ApplyBlackjackGlow(_dealerCardViews);
+            float glowDuration = PlayDealerBlackjackLoseSound();
+            _dealerNaturalBJEndTime = Time.time + glowDuration;
+
+            yield return new WaitForSeconds(glowDuration);
+            StopBlackjackGlow(_dealerCardViews);
+            _dealerNaturalBJPlaying = false;
+            _dealerNaturalBJEndTime = 0f;
+        }
+
+        private void ApplyBlackjackGlow() => ApplyBlackjackGlow(_playerCardViews);
+
+        private static void ApplyBlackjackGlow(IReadOnlyList<CardView> cardViews)
+        {
+            foreach (CardView v in cardViews)
+                v?.StartGlowPulse();
+        }
+
+        private static void StopBlackjackGlow(IReadOnlyList<CardView> cardViews)
+        {
+            foreach (CardView v in cardViews)
+                v?.StopGlowPulse();
         }
 
         /// <summary>Stops fireworks, all audio, and card glow pulses from a blackjack celebration.</summary>
         private void StopBlackjackCelebration()
         {
+            _dealerNaturalBJPlaying = false;
+            _dealerNaturalBJEndTime = 0f;
+
             if (audioSource != null)
                 audioSource.Stop();
 
             foreach (CardView v in _playerCardViews)
-                v.StopGlowPulse();
+                v?.StopGlowPulse();
+            foreach (CardView v in _dealerCardViews)
+                v?.StopGlowPulse();
         }
 
         // ──────────────────────────────────────────────────────────────────────────
@@ -1558,6 +1817,8 @@ namespace Blackjack
         /// <summary>Sets the status label text and resets its color to the default.</summary>
         private void SetStatus(string message)
         {
+            if (ShouldBlockStatusUpdate(message)) return;
+
             statusLabel.text = message;
             statusLabel.color = _defaultStatusColor;
         }
@@ -1565,8 +1826,21 @@ namespace Blackjack
         /// <summary>Sets the status label text with a specific color.</summary>
         private void SetStatus(string message, Color color)
         {
+            if (ShouldBlockStatusUpdate(message)) return;
+
             statusLabel.text = message;
             statusLabel.color = color;
+        }
+
+        private bool ShouldBlockStatusUpdate(string message)
+        {
+            if (IsLimitPulsing)
+                return message != BetLimitStatusMessage && message != string.Empty;
+
+            if (_betLimitStatusLocked)
+                return message != BetLimitStatusMessage;
+
+            return false;
         }
 
         /// <summary>Wraps text in TMP rich text color tags.</summary>
@@ -1752,22 +2026,38 @@ namespace Blackjack
             }
 
             if (longestDuration > 0f)
-                StartCoroutine(StopGlowAfterClip(longestDuration));
+                StartCoroutine(StopGlowAfterClip(longestDuration, _playerCardViews));
 
             return longestDuration;
         }
 
-        private IEnumerator StopGlowAfterClip(float duration)
+        private static IEnumerator StopGlowAfterClip(float duration, IReadOnlyList<CardView> cardViews)
         {
             yield return new WaitForSeconds(duration);
-            foreach (CardView v in _playerCardViews) v.StopGlowPulse();
-            foreach (CardView v in _splitCardViews)  v.StopGlowPulse();
+            StopBlackjackGlow(cardViews);
         }
 
         /// <summary>Plays the lose sound if both clip and source are assigned.</summary>
         private void PlayLoseSound()
         {
             loseSound.Play(audioSource);
+        }
+
+        /// <summary>Plays lose and damnit sounds when the dealer has a natural blackjack.</summary>
+        private float PlayDealerBlackjackLoseSound()
+        {
+            PlayLoseSound();
+
+            float longestDuration = loseSound.HasClip ? loseSound.Length : 0f;
+
+            if (damnitSound.HasClip && audioSource != null)
+            {
+                damnitSound.Play(audioSource);
+                if (damnitSound.Length > longestDuration)
+                    longestDuration = damnitSound.Length;
+            }
+
+            return longestDuration > 0f ? longestDuration : 3f;
         }
 
         /// <summary>Plays the tie sound if both clip and source are assigned.</summary>

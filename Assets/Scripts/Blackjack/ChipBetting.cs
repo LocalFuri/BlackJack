@@ -370,12 +370,14 @@ namespace Blackjack
         /// <param name="enforceMaxBet">
         /// When true, the resulting bet is clamped to <see cref="MaxBet"/>.
         /// If the current bet already equals or exceeds <see cref="MaxBet"/>, nothing is added
-        /// and <see cref="BlackjackGame.NotifyBetLimitExceeded"/> is called instead.
+        /// and <see cref="BlackjackGame.NotifyBetLimitExceeded"/> is called instead (unless
+        /// <paramref name="notifyLimitExceeded"/> is false).
         /// Pass true for player-initiated doubling (e.g. Martingale); leave false for
         /// game-mechanic doublings such as Double Down and Split.
         /// </param>
+        /// <param name="notifyLimitExceeded">When false, limit handling is left to the caller.</param>
         /// <returns>False when <paramref name="enforceMaxBet"/> is true and the bet limit was reached.</returns>
-        public bool DoubleBetChips(bool playSound = false, bool enforceMaxBet = false)
+        public bool DoubleBetChips(bool playSound = false, bool enforceMaxBet = false, bool notifyLimitExceeded = true)
         {
             if (_columnOrder.Count == 0) return true;
 
@@ -385,22 +387,24 @@ namespace Blackjack
 
                 if (currentBet >= maxBet)
                 {
-                    blackjackGame?.NotifyBetLimitExceeded();
+                    if (notifyLimitExceeded)
+                        blackjackGame?.NotifyBetLimitExceeded();
                     return false;
                 }
 
                 int doubledBet = currentBet * 2;
                 if (doubledBet > maxBet)
                 {
-                    blackjackGame?.NotifyBetLimitExceeded();
+                    if (notifyLimitExceeded)
+                        blackjackGame?.NotifyBetLimitExceeded();
 
                     int previousBet = currentBet;
                     RestoreBet(maxBet);
                     int delta = TotalBet - previousBet;
-                    if (delta != 0)
+                    if (delta != 0 && notifyLimitExceeded)
                         OnBetChanged?.Invoke(delta);
 
-                    if (playSound && delta > 0)
+                    if (playSound && delta > 0 && notifyLimitExceeded)
                         chipSound.Play(audioSource);
 
                     return false;
@@ -468,7 +472,7 @@ namespace Blackjack
                     blackjackGame.CloseMenu(playSound: false);
                 }
 
-                if (blackjackGame.IsLimitPulsing)
+                if (blackjackGame.IsBetLimitStatusActive)
                     return;
 
                 if (blackjackGame.IsRoundOver)
@@ -496,7 +500,7 @@ namespace Blackjack
                     blackjackGame.CloseMenu();
                 }
 
-                if (blackjackGame.IsLimitPulsing)
+                if (blackjackGame.IsBetLimitStatusActive)
                     return;
 
                 if (blackjackGame.IsRoundOver)
@@ -540,7 +544,7 @@ namespace Blackjack
                     blackjackGame.CloseMenu();
                 }
 
-                if (blackjackGame.IsLimitPulsing)
+                if (blackjackGame.IsBetLimitStatusActive)
                     return;
 
                 if (blackjackGame.IsRoundOver)
@@ -577,7 +581,7 @@ namespace Blackjack
                     blackjackGame.CloseMenu();
                 }
 
-                if (blackjackGame.IsLimitPulsing)
+                if (blackjackGame.IsBetLimitStatusActive)
                     return;
 
                 if (blackjackGame.IsRoundOver)
