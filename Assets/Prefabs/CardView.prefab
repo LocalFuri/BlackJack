@@ -87,7 +87,6 @@ GameObject:
   - component: {fileID: 304751392958160711}
   - component: {fileID: 2236947567237799750}
   - component: {fileID: 1646141887993476412}
-  - component: {fileID: 6277844373213471084}
   m_Layer: 0
   m_Name: CardView
   m_TagString: Untagged
@@ -173,17 +172,3 @@ MonoBehaviour:
   flickerWeight: 0.35
   pulseMinAlpha: 0.15
   pulseMaxAlpha: 0.88
---- !u!114 &6277844373213471084
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4577850078145282559}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3312d7739989d2b4e91e6319e9a96d76, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.RectMask2D
-  m_Padding: {x: 0, y: 0, z: 0, w: 0}
-  m_Softness: {x: 0, y: 0}

@@ -196,6 +196,16 @@ namespace Blackjack
         private ScoreLabelPulse _splitScorePulse;
         private Color _defaultStatusColor;
 
+        private HorizontalLayoutGroup _frozenLayoutGroup;
+        private RectTransform           _doubleDownFirst;
+        private RectTransform           _doubleDownSecond;
+        private RectTransform           _doubleDownThird;
+        private Coroutine               _doubleDownLayoutCoroutine;
+
+        private const float DefaultCardWidth       = 120f;
+        private const float DefaultCardHeight      = 168f;
+        private const float DoubleDownVerticalLift = 24f;
+
         private Hand           ActiveHand  => _activeHandIndex == 0 ? _playerHand  : _splitHand;
         private List<CardView> ActiveViews => _activeHandIndex == 0 ? _playerCardViews : _splitCardViews;
 
@@ -329,14 +339,9 @@ namespace Blackjack
             StopBlackjackCelebration();
             martingalePopup?.Hide();
 
-            foreach (CardView v in _playerCardViews) if (v != null) Destroy(v.gameObject);
-            _playerCardViews.Clear();
-
-            foreach (CardView v in _splitCardViews) if (v != null) Destroy(v.gameObject);
-            _splitCardViews.Clear();
-
-            foreach (CardView v in _dealerCardViews) if (v != null) Destroy(v.gameObject);
-            _dealerCardViews.Clear();
+            DestroyCardViews(_playerCardViews);
+            DestroyCardViews(_splitCardViews);
+            DestroyCardViews(_dealerCardViews);
 
             _playerHand.Clear();
             _splitHand.Clear();
@@ -391,14 +396,9 @@ namespace Blackjack
         {
             if (_state != GameState.RoundOver) return;
 
-            foreach (CardView v in _playerCardViews) if (v != null) Destroy(v.gameObject);
-            _playerCardViews.Clear();
-
-            foreach (CardView v in _splitCardViews) if (v != null) Destroy(v.gameObject);
-            _splitCardViews.Clear();
-
-            foreach (CardView v in _dealerCardViews) if (v != null) Destroy(v.gameObject);
-            _dealerCardViews.Clear();
+            DestroyCardViews(_playerCardViews);
+            DestroyCardViews(_splitCardViews);
+            DestroyCardViews(_dealerCardViews);
 
             _playerHand.Clear();
             _splitHand.Clear();
@@ -566,6 +566,8 @@ namespace Blackjack
         {
             if (_doubleBJSoundPlaying) return;
             StopAllCoroutines();
+            StopDoubleDownLayout();
+            UnfreezeAreaLayout();
             IsLimitPulsing = false;
             _dealerNaturalBJPlaying = false;
             _dealerNaturalBJEndTime = 0f;
@@ -1014,7 +1016,8 @@ namespace Blackjack
             yield return StartCoroutine(
                 DealCardTo(ActiveHand, ActiveViews,
                            _activeHandIndex == 0 ? playerCardArea : splitCardArea,
-                           faceUp: true));
+                           faceUp: true,
+                           doubleDownPlacement: true));
 
             SetStatus("Double Down!");
 
@@ -1540,7 +1543,8 @@ namespace Blackjack
         // Card Dealing
         // ──────────────────────────────────────────────────────────────────────────
 
-        private IEnumerator DealCardTo(Hand hand, List<CardView> views, Transform area, bool faceUp)
+        private IEnumerator DealCardTo(
+            Hand hand, List<CardView> views, Transform area, bool faceUp, bool doubleDownPlacement = false)
         {
             yield return new WaitForSeconds(dealDelay);
 
@@ -1550,8 +1554,16 @@ namespace Blackjack
             if (dealCardSound.HasClip && audioSource != null)
                 dealCardSound.Play(audioSource);
 
+            if (doubleDownPlacement)
+            {
+                FreezeAreaLayout(area);
+                for (int i = 0; i < views.Count; i++)
+                    EnsureIgnoreLayout(views[i].GetComponent<RectTransform>());
+            }
+
             // Always spawn face-down, then flip to reveal if this card should be face-up
-            CardView view = SpawnCardView(card, area, faceUp: false);
+            CardView view = SpawnCardView(card, area, faceUp: false, ignoreLayout: doubleDownPlacement);
+
             views.Add(view);
 
             if (faceUp)
@@ -1560,12 +1572,137 @@ namespace Blackjack
                 view.Flip(toFaceUp: true, () => flipDone = true);
                 yield return new WaitUntil(() => flipDone);
             }
+
+            if (doubleDownPlacement && views.Count >= 3)
+                ApplyDoubleDownLayout(views[0], views[1], view);
         }
 
-        private CardView SpawnCardView(CardData card, Transform parent, bool faceUp)
+        private void FreezeAreaLayout(Transform area)
         {
-            GameObject go   = Instantiate(cardViewPrefab, parent);
-            CardView   view = go.GetComponent<CardView>();
+            UnfreezeAreaLayout();
+            if (area == null) return;
+
+            _frozenLayoutGroup = area.GetComponent<HorizontalLayoutGroup>();
+            if (_frozenLayoutGroup != null)
+                _frozenLayoutGroup.enabled = false;
+        }
+
+        private void UnfreezeAreaLayout()
+        {
+            if (_frozenLayoutGroup != null)
+            {
+                _frozenLayoutGroup.enabled = true;
+                _frozenLayoutGroup = null;
+            }
+        }
+
+        private void ApplyDoubleDownLayout(
+            CardView firstCard, CardView secondCard, CardView doubleDownCard)
+        {
+            if (firstCard == null || secondCard == null || doubleDownCard == null)
+                return;
+
+            RectTransform firstRt  = firstCard.GetComponent<RectTransform>();
+            RectTransform secondRt = secondCard.GetComponent<RectTransform>();
+            RectTransform thirdRt  = doubleDownCard.GetComponent<RectTransform>();
+
+            EnsureIgnoreLayout(thirdRt);
+
+            PlaceDoubleDownCard(firstRt, secondRt, thirdRt);
+            thirdRt.SetAsLastSibling();
+
+            _doubleDownFirst  = firstRt;
+            _doubleDownSecond = secondRt;
+            _doubleDownThird  = thirdRt;
+            StartDoubleDownLayoutMaintenance();
+        }
+
+        private static void PlaceDoubleDownCard(
+            RectTransform firstRt, RectTransform secondRt, RectTransform thirdRt)
+        {
+            if (firstRt == null || secondRt == null || thirdRt == null)
+                return;
+
+            Transform area = firstRt.parent;
+            if (area == null)
+                return;
+
+            float cardWidth  = firstRt.sizeDelta.x > 1f ? firstRt.sizeDelta.x : DefaultCardWidth;
+            float cardHeight = firstRt.sizeDelta.y > 1f ? firstRt.sizeDelta.y : DefaultCardHeight;
+
+            Vector2 center = (firstRt.anchoredPosition + secondRt.anchoredPosition) * 0.5f;
+            center.y += DoubleDownVerticalLift;
+
+            thirdRt.SetParent(area, false);
+            thirdRt.anchorMin = thirdRt.anchorMax = thirdRt.pivot = new Vector2(0.5f, 0.5f);
+            thirdRt.sizeDelta = new Vector2(cardWidth, cardHeight);
+            thirdRt.localScale = Vector3.one;
+            thirdRt.localRotation = Quaternion.Euler(0f, 0f, -90f);
+            thirdRt.anchoredPosition = center;
+        }
+
+        private void StartDoubleDownLayoutMaintenance()
+        {
+            if (_doubleDownLayoutCoroutine != null)
+                StopCoroutine(_doubleDownLayoutCoroutine);
+            _doubleDownLayoutCoroutine = StartCoroutine(MaintainDoubleDownLayout());
+        }
+
+        private IEnumerator MaintainDoubleDownLayout()
+        {
+            while (_doubleDownFirst != null && _doubleDownSecond != null && _doubleDownThird != null)
+            {
+                PlaceDoubleDownCard(_doubleDownFirst, _doubleDownSecond, _doubleDownThird);
+                _doubleDownThird.SetAsLastSibling();
+                yield return null;
+            }
+
+            _doubleDownLayoutCoroutine = null;
+        }
+
+        private void StopDoubleDownLayout()
+        {
+            if (_doubleDownLayoutCoroutine != null)
+            {
+                StopCoroutine(_doubleDownLayoutCoroutine);
+                _doubleDownLayoutCoroutine = null;
+            }
+
+            _doubleDownFirst  = null;
+            _doubleDownSecond = null;
+            _doubleDownThird  = null;
+        }
+
+        private static void EnsureIgnoreLayout(RectTransform rt)
+        {
+            LayoutElement layoutElement = rt.GetComponent<LayoutElement>();
+            if (layoutElement == null)
+                layoutElement = rt.gameObject.AddComponent<LayoutElement>();
+            layoutElement.ignoreLayout = true;
+        }
+
+        private static void DestroyCardViews(System.Collections.Generic.List<CardView> views)
+        {
+            for (int i = views.Count - 1; i >= 0; i--)
+            {
+                CardView view = views[i];
+                if (view == null) continue;
+                UnityEngine.Object.Destroy(view.gameObject);
+            }
+            views.Clear();
+        }
+
+        private CardView SpawnCardView(CardData card, Transform parent, bool faceUp, bool ignoreLayout = false)
+        {
+            GameObject go = Instantiate(cardViewPrefab);
+            RectTransform rt = go.GetComponent<RectTransform>();
+
+            if (ignoreLayout)
+                EnsureIgnoreLayout(rt);
+
+            rt.SetParent(parent, false);
+
+            CardView view = go.GetComponent<CardView>();
             view.Setup(
                 spriteRegistry.GetSprite(card),
                 spriteRegistry.GetBackSprite(),
@@ -2149,6 +2286,9 @@ namespace Blackjack
 
         private void ClearTable()
         {
+            StopDoubleDownLayout();
+            UnfreezeAreaLayout();
+
             _playerHand.Clear();
             _splitHand.Clear();
             _dealerHand.Clear();
@@ -2159,14 +2299,9 @@ namespace Blackjack
             ResetPlayerScoreLabelPosition();
             SetScoreLabelsVisible(false);
 
-            foreach (CardView v in _playerCardViews) if (v != null) Destroy(v.gameObject);
-            _playerCardViews.Clear();
-
-            foreach (CardView v in _splitCardViews)  if (v != null) Destroy(v.gameObject);
-            _splitCardViews.Clear();
-
-            foreach (CardView v in _dealerCardViews) if (v != null) Destroy(v.gameObject);
-            _dealerCardViews.Clear();
+            DestroyCardViews(_playerCardViews);
+            DestroyCardViews(_splitCardViews);
+            DestroyCardViews(_dealerCardViews);
         }
     }
 }
