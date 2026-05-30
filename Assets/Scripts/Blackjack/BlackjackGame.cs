@@ -107,6 +107,8 @@ namespace Blackjack
         [Tooltip("dealDelay ist set to 0.45 in code, you can not change it in the inspector!")]
         [SerializeField] private float dealDelay          = 0.45f; //default is 0.45
         [SerializeField] private float dealerPauseDelay   = 0.7f;
+        [Tooltip("Seconds to wait after doubling the bet before dealing the third card.")]
+        [SerializeField] private float doubleDownBetPause = 0.6f;
         [SerializeField] private float endRoundDelay      = 3.0f;
         [SerializeField] private float newRoundPause      = 0.5f;
 
@@ -196,6 +198,8 @@ namespace Blackjack
         private ScoreLabelPulse _splitScorePulse;
         private Color _defaultStatusColor;
 
+        private const float StatusLabelHeight = 50f;
+
         private HorizontalLayoutGroup _frozenLayoutGroup;
         private RectTransform           _doubleDownFirst;
         private RectTransform           _doubleDownSecond;
@@ -204,9 +208,10 @@ namespace Blackjack
 
         private const float DefaultCardWidth       = 120f;
         private const float DefaultCardHeight      = 168f;
-        private const float DoubleDownVerticalLift = 24f;
+        // Small upward shift from the pair center (see PlaceDoubleDownCard).
+        private const float DoubleDownVerticalLift = 50f;
 
-        private Hand           ActiveHand  => _activeHandIndex == 0 ? _playerHand  : _splitHand;
+    private Hand           ActiveHand  => _activeHandIndex == 0 ? _playerHand  : _splitHand;
         private List<CardView> ActiveViews => _activeHandIndex == 0 ? _playerCardViews : _splitCardViews;
 
         private enum GameState { Idle, PlayerTurn, DealerTurn, RoundOver }
@@ -457,6 +462,7 @@ namespace Blackjack
             _deck.Build();
             _defaultStatusColor = statusLabel.color;
             AlignStatusLabelToCardArea();
+            AlignStreakLabelToPlayerMoney();
             InitSplitScoreLabel();
             SetScoreLabelsVisible(false);
             RefreshStreakLabel();
@@ -653,7 +659,7 @@ namespace Blackjack
 
             surrenderSound.Play(audioSource);
             RecordRoundOutcome(true, lostAmount: CurrentBet * 0.5m);
-            SetStatus("<size=40>Surrender returns 1/2 of bet</size>", SurrenderColor);
+            SetStatus("Surrender returns 1/2 of bet", SurrenderColor);
             ApplyPayout(PayoutResult.Surrender, CurrentBet);
 
             yield return StartCoroutine(EndRound());
@@ -1013,6 +1019,7 @@ namespace Blackjack
             RefreshMoneyLabel();
             chipBetting?.DoubleBetChips();
             ddSound.Play(audioSource); //mark dd sound
+            yield return new WaitForSeconds(doubleDownBetPause);
             yield return StartCoroutine(
                 DealCardTo(ActiveHand, ActiveViews,
                            _activeHandIndex == 0 ? playerCardArea : splitCardArea,
@@ -1333,6 +1340,28 @@ namespace Blackjack
             RefreshStreakLabel();
         }
 
+        /// <summary>
+        /// Keeps the streak label horizontally centered on the same axis as the player money label.
+        /// </summary>
+        private void AlignStreakLabelToPlayerMoney()
+        {
+            if (streakLabel == null || playerMoneyLabel == null) return;
+
+            RectTransform moneyRT  = playerMoneyLabel.rectTransform;
+            RectTransform streakRT = streakLabel.rectTransform;
+
+            streakLabel.horizontalAlignment = HorizontalAlignmentOptions.Center;
+            streakLabel.margin              = playerMoneyLabel.margin;
+
+            Vector2 pos = streakRT.anchoredPosition;
+            pos.x       = moneyRT.anchoredPosition.x;
+            streakRT.anchoredPosition = pos;
+
+            Vector2 size = streakRT.sizeDelta;
+            size.x       = moneyRT.sizeDelta.x;
+            streakRT.sizeDelta = size;
+        }
+
         /// <summary>Updates the streak label to show the current loss streak, total amount lost, and when in Martingale mode, the chip amount being added each round.</summary>
         private void RefreshStreakLabel()
         {
@@ -1549,7 +1578,6 @@ namespace Blackjack
             yield return new WaitForSeconds(dealDelay);
 
             CardData card = _deck.Draw();
-            hand.AddCard(card);
 
             if (dealCardSound.HasClip && audioSource != null)
                 dealCardSound.Play(audioSource);
@@ -1561,10 +1589,15 @@ namespace Blackjack
                     EnsureIgnoreLayout(views[i].GetComponent<RectTransform>());
             }
 
-            // Always spawn face-down, then flip to reveal if this card should be face-up
             CardView view = SpawnCardView(card, area, faceUp: false, ignoreLayout: doubleDownPlacement);
+            if (view == null)
+                yield break;
 
+            hand.AddCard(card);
             views.Add(view);
+
+            if (doubleDownPlacement && views.Count >= 3)
+                ApplyDoubleDownLayout(views[0], views[1], view);
 
             if (faceUp)
             {
@@ -1574,7 +1607,12 @@ namespace Blackjack
             }
 
             if (doubleDownPlacement && views.Count >= 3)
+            {
+                yield return null;
+                Canvas.ForceUpdateCanvases();
+                yield return new WaitForEndOfFrame();
                 ApplyDoubleDownLayout(views[0], views[1], view);
+            }
         }
 
         private void FreezeAreaLayout(Transform area)
@@ -1607,9 +1645,7 @@ namespace Blackjack
             RectTransform thirdRt  = doubleDownCard.GetComponent<RectTransform>();
 
             EnsureIgnoreLayout(thirdRt);
-
             PlaceDoubleDownCard(firstRt, secondRt, thirdRt);
-            thirdRt.SetAsLastSibling();
 
             _doubleDownFirst  = firstRt;
             _doubleDownSecond = secondRt;
@@ -1623,28 +1659,37 @@ namespace Blackjack
             if (firstRt == null || secondRt == null || thirdRt == null)
                 return;
 
-            Transform area = firstRt.parent;
-            if (area == null)
+            RectTransform areaRt = firstRt.parent as RectTransform;
+            if (areaRt == null || secondRt.parent != areaRt)
                 return;
 
-            float cardWidth  = firstRt.sizeDelta.x > 1f ? firstRt.sizeDelta.x : DefaultCardWidth;
-            float cardHeight = firstRt.sizeDelta.y > 1f ? firstRt.sizeDelta.y : DefaultCardHeight;
+            if (thirdRt.parent != areaRt)
+                thirdRt.SetParent(areaRt, false);
 
-            Vector2 center = (firstRt.anchoredPosition + secondRt.anchoredPosition) * 0.5f;
-            center.y += DoubleDownVerticalLift;
+            SyncDoubleDownCardSize(thirdRt);
+            EnsureDoubleDownCardVisible(thirdRt);
 
-            thirdRt.SetParent(area, false);
-            thirdRt.anchorMin = thirdRt.anchorMax = thirdRt.pivot = new Vector2(0.5f, 0.5f);
-            thirdRt.sizeDelta = new Vector2(cardWidth, cardHeight);
-            thirdRt.localScale = Vector3.one;
+            thirdRt.anchorMin = new Vector2(0.5f, 0.5f);
+            thirdRt.anchorMax = new Vector2(0.5f, 0.5f);
+            thirdRt.pivot     = new Vector2(0.5f, 0.5f);
+
+            Vector3 firstCenter  = firstRt.TransformPoint(firstRt.rect.center);
+            Vector3 secondCenter = secondRt.TransformPoint(secondRt.rect.center);
+            Vector3 pairCenter   = (firstCenter + secondCenter) * 0.5f;
+
+            Vector3 worldCenter = pairCenter + areaRt.TransformVector(
+                new Vector3(0f, DoubleDownVerticalLift, 0f));
+
             thirdRt.localRotation = Quaternion.Euler(0f, 0f, -90f);
-            thirdRt.anchoredPosition = center;
+            thirdRt.position      = worldCenter;
+            thirdRt.SetAsLastSibling();
         }
 
         private void StartDoubleDownLayoutMaintenance()
         {
             if (_doubleDownLayoutCoroutine != null)
                 StopCoroutine(_doubleDownLayoutCoroutine);
+
             _doubleDownLayoutCoroutine = StartCoroutine(MaintainDoubleDownLayout());
         }
 
@@ -1653,11 +1698,44 @@ namespace Blackjack
             while (_doubleDownFirst != null && _doubleDownSecond != null && _doubleDownThird != null)
             {
                 PlaceDoubleDownCard(_doubleDownFirst, _doubleDownSecond, _doubleDownThird);
-                _doubleDownThird.SetAsLastSibling();
                 yield return null;
             }
 
             _doubleDownLayoutCoroutine = null;
+        }
+
+        private static void EnsureDoubleDownCardVisible(RectTransform thirdRt)
+        {
+            thirdRt.gameObject.SetActive(true);
+
+            if (thirdRt.TryGetComponent(out CanvasRenderer renderer))
+                renderer.cullTransparentMesh = false;
+        }
+
+        private static void EnsureIgnoreLayout(RectTransform rt)
+        {
+            if (!rt.TryGetComponent(out LayoutElement layoutElement))
+                layoutElement = rt.gameObject.AddComponent<LayoutElement>();
+            layoutElement.ignoreLayout = true;
+        }
+
+        private static void SyncDoubleDownCardSize(RectTransform rt)
+        {
+            SyncCardLayoutElement(rt, DefaultCardWidth, DefaultCardHeight);
+            rt.sizeDelta = new Vector2(DefaultCardWidth, DefaultCardHeight);
+            rt.localScale = Vector3.one;
+        }
+
+        private static void SyncCardLayoutElement(RectTransform rt, float width, float height)
+        {
+            if (!rt.TryGetComponent(out LayoutElement layoutElement))
+                layoutElement = rt.gameObject.AddComponent<LayoutElement>();
+
+            layoutElement.ignoreLayout     = true;
+            layoutElement.preferredWidth   = width;
+            layoutElement.preferredHeight  = height;
+            layoutElement.minWidth         = width;
+            layoutElement.minHeight        = height;
         }
 
         private void StopDoubleDownLayout()
@@ -1668,17 +1746,28 @@ namespace Blackjack
                 _doubleDownLayoutCoroutine = null;
             }
 
+            DestroyLegacyDoubleDownAnchors(playerCardArea);
+            DestroyLegacyDoubleDownAnchors(splitCardArea);
+
             _doubleDownFirst  = null;
             _doubleDownSecond = null;
             _doubleDownThird  = null;
         }
 
-        private static void EnsureIgnoreLayout(RectTransform rt)
+        private static void DestroyLegacyDoubleDownAnchors(Transform area)
         {
-            LayoutElement layoutElement = rt.GetComponent<LayoutElement>();
-            if (layoutElement == null)
-                layoutElement = rt.gameObject.AddComponent<LayoutElement>();
-            layoutElement.ignoreLayout = true;
+            if (area == null)
+                return;
+
+            Transform anchor = area.Find("DoubleDownAnchor");
+            if (anchor == null)
+                return;
+
+            var areaRt = (RectTransform)area;
+            for (int i = anchor.childCount - 1; i >= 0; i--)
+                anchor.GetChild(i).SetParent(areaRt, true);
+
+            UnityEngine.Object.Destroy(anchor.gameObject);
         }
 
         private static void DestroyCardViews(System.Collections.Generic.List<CardView> views)
@@ -1694,13 +1783,22 @@ namespace Blackjack
 
         private CardView SpawnCardView(CardData card, Transform parent, bool faceUp, bool ignoreLayout = false)
         {
-            GameObject go = Instantiate(cardViewPrefab);
+            if (cardViewPrefab == null || parent == null)
+            {
+                Debug.LogError("BlackjackGame: cardViewPrefab or card area is not assigned.");
+                return null;
+            }
+
+            GameObject go = Instantiate(cardViewPrefab, parent, false);
+            go.SetActive(true);
+            go.name = ignoreLayout ? "DoubleDownCard" : "CardView";
+
             RectTransform rt = go.GetComponent<RectTransform>();
-
             if (ignoreLayout)
+            {
                 EnsureIgnoreLayout(rt);
-
-            rt.SetParent(parent, false);
+                SyncDoubleDownCardSize(rt);
+            }
 
             CardView view = go.GetComponent<CardView>();
             view.Setup(
@@ -1939,16 +2037,32 @@ namespace Blackjack
 
             RectTransform statusRT = statusLabel.rectTransform;
 
+            statusLabel.horizontalAlignment = HorizontalAlignmentOptions.Left;
+            statusLabel.verticalAlignment   = VerticalAlignmentOptions.Middle;
+
             // Move pivot to the left edge so anchoredPosition controls the left side.
             Vector2 pivot = statusRT.pivot;
             pivot.x = 0f;
+            pivot.y = 0.5f;
             statusRT.pivot = pivot;
+
+            Vector2 size = statusRT.sizeDelta;
+            size.y = StatusLabelHeight;
+            statusRT.sizeDelta = size;
 
             // Left edge of dealer card area = its anchoredPosition.x - half its width.
             float leftEdge = dealerRT.anchoredPosition.x - dealerRT.rect.width * 0.5f;
             Vector2 pos = statusRT.anchoredPosition;
             pos.x = leftEdge;
             statusRT.anchoredPosition = pos;
+        }
+
+        private void ApplyStatusLabelAlignment()
+        {
+            if (statusLabel == null) return;
+
+            statusLabel.horizontalAlignment = HorizontalAlignmentOptions.Left;
+            statusLabel.verticalAlignment   = VerticalAlignmentOptions.Middle;
         }
 
         /// <summary>Sets the status label text and resets its color to the default.</summary>
@@ -1958,6 +2072,7 @@ namespace Blackjack
 
             statusLabel.text = message;
             statusLabel.color = _defaultStatusColor;
+            ApplyStatusLabelAlignment();
         }
 
         /// <summary>Sets the status label text with a specific color.</summary>
@@ -1967,6 +2082,7 @@ namespace Blackjack
 
             statusLabel.text = message;
             statusLabel.color = color;
+            ApplyStatusLabelAlignment();
         }
 
         private bool ShouldBlockStatusUpdate(string message)
