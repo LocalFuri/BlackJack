@@ -1,14 +1,17 @@
-// Custom UGUI shader with additive blending and HDR vertex-color passthrough.
-// Assign to the Glow Image on CardView. Set Image.color to HDR values (> 1.0)
-// to feed into URP post-processing Bloom.
+// Card inner glow: masked to the card sprite alpha so nothing spills onto the table.
+// Assign to the Glow Image on CardView; set Image.sprite to the same sprite as the card face.
 Shader "Blackjack/UIGlowBloom"
 {
     Properties
     {
-        [PerRendererData] _MainTex ("Texture", 2D) = "white" {}
-        [HDR] _Color ("Glow Color (HDR)", Color) = (1, 0.9, 0.2, 1)
+        [PerRendererData] _MainTex ("Sprite", 2D) = "white" {}
+        [HDR] _Color ("Glow Color", Color) = (1, 0.85, 0.15, 1)
 
-        // Required by UGUI stencil/masking system
+        _FaceGlow ("Face Glow Strength", Range(0.0, 1.0)) = 0.35
+        _EdgeGlow ("Edge Glow Strength", Range(0.0, 1.0)) = 1.0
+        _InnerEdge ("Edge Ramp Start", Range(0.0, 1.0)) = 0.55
+        _OuterEdge ("Edge Ramp End", Range(0.0, 1.0)) = 0.92
+
         _StencilComp      ("Stencil Comparison", Float) = 8
         _Stencil          ("Stencil ID",         Float) = 0
         _StencilOp        ("Stencil Operation",  Float) = 0
@@ -41,7 +44,7 @@ Shader "Blackjack/UIGlowBloom"
         Lighting Off
         ZWrite   Off
         ZTest    [unity_GUIZTestMode]
-        Blend    SrcAlpha One       // Additive: glow brightness accumulates in HDR framebuffer
+        Blend    SrcAlpha OneMinusSrcAlpha
         ColorMask [_ColorMask]
 
         Pass
@@ -65,7 +68,7 @@ Shader "Blackjack/UIGlowBloom"
             struct v2f
             {
                 float4 vertex        : SV_POSITION;
-                float4 color         : COLOR;       // float4: no HDR clamping
+                float4 color         : COLOR;
                 float2 texcoord      : TEXCOORD0;
                 float4 worldPosition : TEXCOORD1;
                 UNITY_VERTEX_OUTPUT_STEREO
@@ -73,9 +76,13 @@ Shader "Blackjack/UIGlowBloom"
 
             sampler2D _MainTex;
             float4    _MainTex_ST;
-            float4    _Color;                       // float4: supports [HDR] values > 1
+            float4    _Color;
             float4    _TextureSampleAdd;
             float4    _ClipRect;
+            float     _FaceGlow;
+            float     _EdgeGlow;
+            float     _InnerEdge;
+            float     _OuterEdge;
 
             v2f vert(appdata_t v)
             {
@@ -85,17 +92,27 @@ Shader "Blackjack/UIGlowBloom"
                 OUT.worldPosition = v.vertex;
                 OUT.vertex        = UnityObjectToClipPos(OUT.worldPosition);
                 OUT.texcoord      = TRANSFORM_TEX(v.texcoord, _MainTex);
-                OUT.color         = v.color * _Color; // both vertex color and material color are HDR-capable
+                OUT.color         = v.color * _Color;
                 return OUT;
             }
 
-            // float4 return type: HDR values pass through to the framebuffer unclamped
-            float4 frag(v2f IN) : SV_Target
+            fixed4 frag(v2f IN) : SV_Target
             {
-                float4 color = (tex2D(_MainTex, IN.texcoord) + _TextureSampleAdd) * IN.color;
-                color.a     *= UnityGet2DClipping(IN.worldPosition.xy, _ClipRect);
+                fixed4 tex = tex2D(_MainTex, IN.texcoord) + _TextureSampleAdd;
+                float mask = tex.a;
+                clip(mask - 0.001);
+
+                float2 centered = abs(IN.texcoord - 0.5) * 2.0;
+                float  edgeDist = max(centered.x, centered.y);
+                float  edgeT    = smoothstep(_InnerEdge, _OuterEdge, edgeDist);
+                float  strength = lerp(_FaceGlow, _EdgeGlow, edgeT);
+
+                fixed4 color;
+                color.rgb = IN.color.rgb * strength;
+                color.a   = mask * IN.color.a * strength;
+                color.a  *= UnityGet2DClipping(IN.worldPosition.xy, _ClipRect);
                 clip(color.a - 0.001);
-                return color; // intentionally unclamped — bloom picks up values > threshold
+                return color;
             }
             ENDCG
         }

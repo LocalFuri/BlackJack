@@ -35,7 +35,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 16, y: 16}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &8055661748627636367
 CanvasRenderer:
@@ -67,7 +67,7 @@ MonoBehaviour:
       m_Calls: []
   m_Sprite: {fileID: 0}
   m_Type: 0
-  m_PreserveAspect: 0
+  m_PreserveAspect: 1
   m_FillCenter: 1
   m_FillMethod: 4
   m_FillAmount: 1
@@ -167,7 +167,7 @@ MonoBehaviour:
   cardImage: {fileID: 2236947567237799750}
   glowImage: {fileID: 4316553193873358632}
   flipDuration: 0.35
-  breatheSpeed: 0.7
+  breatheSpeed: 0.8
   flickerSpeed: 4.5
   flickerWeight: 0.35
   pulseMinAlpha: 0.15

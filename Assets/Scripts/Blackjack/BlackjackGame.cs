@@ -4,7 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
-
+using UnityEngine.Rendering;
 using UnityEngine.UI;
 using TMPro;
 
@@ -91,15 +91,15 @@ namespace Blackjack
     [SerializeField] private SoundEntry cheaterSound;
     [SerializeField] private SoundEntry chipSound;
     [SerializeField] private SoundEntry damnitSound;
-    [SerializeField] private SoundEntry ddSound;
-    [SerializeField] private SoundEntry hmhSound;
     [SerializeField] private SoundEntry dealCardSound;
+    [SerializeField] private SoundEntry ddSound;
     [SerializeField] private SoundEntry exitSound;
+    [SerializeField] private SoundEntry hmhSound;
     [SerializeField] private SoundEntry knockSound;
     [SerializeField] private SoundEntry loseSound;
     [SerializeField] private SoundEntry naturalBlackjackSound;
-    [SerializeField] private SoundEntry startupSound;
     [SerializeField] private SoundEntry resetSound;
+    [SerializeField] private SoundEntry startupSound;
     [SerializeField] private SoundEntry surrenderSound;
     [SerializeField] private SoundEntry tieSound;
     [SerializeField] private SoundEntry winSound;
@@ -950,7 +950,12 @@ namespace Blackjack
 
             if (dealerNatural)
             {
-                yield return StartCoroutine(ApplyDealerNaturalBlackjackLossRoutine(CurrentBet, revealHole: true));
+                if (_dealerHoleCardView != null && !_dealerHoleCardView.IsFaceUp)
+                    yield return StartCoroutine(RevealDealerHoleForNaturalBlackjack());
+                else
+                    UpdateScoreLabels(revealDealer: true);
+
+                yield return StartCoroutine(ApplyDealerNaturalBlackjackLossRoutine(CurrentBet, revealHole: false));
                 yield return StartCoroutine(EndRound());
                 yield break;
             }
@@ -2055,8 +2060,7 @@ namespace Blackjack
             view.Setup(
                 spriteRegistry.GetSprite(card),
                 spriteRegistry.GetBackSprite(),
-                faceUp
-            );
+                faceUp);
             return view;
         }
 
@@ -2202,13 +2206,13 @@ namespace Blackjack
 
         private void ApplyBlackjackGlow() => ApplyBlackjackGlow(_playerCardViews);
 
-        private static void ApplyBlackjackGlow(IReadOnlyList<CardView> cardViews)
+        private void ApplyBlackjackGlow(IReadOnlyList<CardView> cardViews)
         {
             foreach (CardView v in cardViews)
                 v?.StartGlowPulse();
         }
 
-        private static void StopBlackjackGlow(IReadOnlyList<CardView> cardViews)
+        private void StopBlackjackGlow(IReadOnlyList<CardView> cardViews)
         {
             foreach (CardView v in cardViews)
                 v?.StopGlowPulse();
@@ -2535,7 +2539,7 @@ namespace Blackjack
             return longestDuration;
         }
 
-        private static IEnumerator StopGlowAfterClip(float duration, IReadOnlyList<CardView> cardViews)
+        private IEnumerator StopGlowAfterClip(float duration, IReadOnlyList<CardView> cardViews)
         {
             yield return new WaitForSeconds(duration);
             StopBlackjackGlow(cardViews);

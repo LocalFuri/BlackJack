@@ -1112,7 +1112,7 @@ GameObject:
   - component: {fileID: 210100004}
   - component: {fileID: 210100003}
   m_Layer: 0
-  m_Name: DealerBjTestButton
+  m_Name: BJ Dealer
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1433,7 +1433,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0}
   m_AnchorMax: {x: 0.5, y: 0}
   m_AnchoredPosition: {x: -744.5, y: 303}
-  m_SizeDelta: {x: 238.041, y: 31.29}
+  m_SizeDelta: {x: 238.041, y: 31.28125}
   m_Pivot: {x: 0.5, y: 0}
 --- !u!114 &220390483
 MonoBehaviour:
@@ -1889,8 +1889,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0}
   m_AnchorMax: {x: 0.5, y: 0}
-  m_AnchoredPosition: {x: -744.5, y: 263.71}
-  m_SizeDelta: {x: 238.041, y: 31.29}
+  m_AnchoredPosition: {x: -744.5, y: 263.71875}
+  m_SizeDelta: {x: 238.041, y: 31.28125}
   m_Pivot: {x: 0.5, y: 0}
 --- !u!114 &251948586
 MonoBehaviour:
@@ -2848,18 +2848,18 @@ MonoBehaviour:
   damnitSound:
     clip: {fileID: 8300000, guid: d3df581ca861dc74ab052acc099ead6e, type: 3}
     volume: 0.38
-  ddSound:
-    clip: {fileID: 8300000, guid: 35d10448a85321f4d91777a1cdc67597, type: 3}
-    volume: 1
-  hmhSound:
-    clip: {fileID: 8300000, guid: 31079221b5618d34cbe708c014412244, type: 3}
-    volume: 0.66
   dealCardSound:
     clip: {fileID: 8300000, guid: f6a41ed8c1389984fbc5f1c6ec4ef036, type: 3}
+    volume: 1
+  ddSound:
+    clip: {fileID: 8300000, guid: 35d10448a85321f4d91777a1cdc67597, type: 3}
     volume: 1
   exitSound:
     clip: {fileID: 8300000, guid: bb485ef058a851148a35ed664aa421d8, type: 3}
     volume: 0.2
+  hmhSound:
+    clip: {fileID: 8300000, guid: 31079221b5618d34cbe708c014412244, type: 3}
+    volume: 0.66
   knockSound:
     clip: {fileID: 8300000, guid: babd8fa50fa977f4881b58111a1ab364, type: 3}
     volume: 0.47
@@ -2869,12 +2869,12 @@ MonoBehaviour:
   naturalBlackjackSound:
     clip: {fileID: 8300000, guid: d41e2de435c861f4eb634b7bb08f0492, type: 3}
     volume: 1
-  startupSound:
-    clip: {fileID: 8300000, guid: d34ed06c2af490041bf76bed5adb015b, type: 3}
-    volume: 0.15
   resetSound:
     clip: {fileID: 8300000, guid: 1d30d9b75a0f1cd47b88da14c16aa77e, type: 3}
     volume: 0.52
+  startupSound:
+    clip: {fileID: 8300000, guid: d34ed06c2af490041bf76bed5adb015b, type: 3}
+    volume: 0.15
   surrenderSound:
     clip: {fileID: 8300000, guid: 70b0b64751aea564092672be2ea2cb01, type: 3}
     volume: 0.6
@@ -2893,6 +2893,7 @@ MonoBehaviour:
   endRoundDelay: 0
   newRoundPause: 0.5
   controls: {fileID: 11400000, guid: 5599a331733b13a4e8a7f08b7c64714c, type: 2}
+  bloomVolume: {fileID: 0}
 --- !u!114 &383358999
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9069,8 +9070,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0}
   m_AnchorMax: {x: 0.5, y: 0}
-  m_AnchoredPosition: {x: -744.5, y: 224.41998}
-  m_SizeDelta: {x: 238.041, y: 22.35}
+  m_AnchoredPosition: {x: -744.5, y: 224.4375}
+  m_SizeDelta: {x: 238.041, y: 31.28125}
   m_Pivot: {x: 0.5, y: 0}
 --- !u!114 &1329986871
 MonoBehaviour:

@@ -33,23 +33,80 @@ namespace Blackjack
 
         private float _glowNoiseOffset;
 
+        private static readonly string[] LegacyPeekOverlayNames =
+        {
+            "CardCurlOverlay",
+            "PeekReveal",
+            "PeekUnderside",
+            "PeekShadow",
+            "PeekFlapClip",
+        };
+
         private void Awake()
         {
             if (cardImage == null) cardImage = GetComponent<Image>();
             _glowNoiseOffset = Random.Range(0f, 100f);
+            RemoveLegacyPeekOverlays();
+            EnsureRectMask();
+        }
+
+        private void EnsureRectMask()
+        {
+            if (GetComponent<RectMask2D>() == null)
+                gameObject.AddComponent<RectMask2D>();
         }
 
         public void Setup(Sprite faceSprite, Sprite backSprite, bool faceUp = true)
         {
+            RemoveLegacyPeekOverlays();
+            ResetCardTransform();
+
             _faceSprite      = faceSprite;
             _backSprite      = backSprite;
             _isFaceUp        = faceUp;
             cardImage.sprite = faceUp ? _faceSprite : _backSprite;
+            SyncGlowSprite();
             SetGlow(false);
+        }
+
+        private void SyncGlowSprite()
+        {
+            if (glowImage == null || cardImage == null)
+                return;
+
+            glowImage.sprite         = cardImage.sprite;
+            glowImage.preserveAspect = true;
+        }
+
+        private void RemoveLegacyPeekOverlays()
+        {
+            for (int i = transform.childCount - 1; i >= 0; i--)
+            {
+                Transform child = transform.GetChild(i);
+                if (glowImage != null && child == glowImage.transform)
+                    continue;
+
+                foreach (string overlayName in LegacyPeekOverlayNames)
+                {
+                    if (child.name != overlayName)
+                        continue;
+
+                    Destroy(child.gameObject);
+                    break;
+                }
+            }
+        }
+
+        private void ResetCardTransform()
+        {
+            transform.localRotation = Quaternion.identity;
         }
 
         public void Flip(bool toFaceUp, System.Action onComplete = null)
         {
+            RemoveLegacyPeekOverlays();
+            ResetCardTransform();
+
             if (_flipCoroutine != null) StopCoroutine(_flipCoroutine);
             _flipCoroutine = StartCoroutine(FlipRoutine(toFaceUp, onComplete));
         }
@@ -72,6 +129,7 @@ namespace Blackjack
 
             _isFaceUp        = toFaceUp;
             cardImage.sprite = toFaceUp ? _faceSprite : _backSprite;
+            SyncGlowSprite();
 
             elapsed = 0f;
             while (elapsed < half)
@@ -90,14 +148,16 @@ namespace Blackjack
         {
             StopGlowPulse();
             if (glowImage == null) return;
+            SyncGlowSprite();
             glowImage.enabled = enabled;
-            glowImage.color   = new Color(3f, 2.7f, 0.5f, enabled ? pulseMaxAlpha : 0f);
+            glowImage.color   = new Color(1.15f, 0.92f, 0.2f, enabled ? pulseMaxAlpha : 0f);
         }
 
         public void StartGlowPulse()
         {
             if (glowImage == null) return;
             StopGlowPulse();
+            SyncGlowSprite();
             glowImage.enabled = true;
             _glowCoroutine    = StartCoroutine(GlowPulseRoutine());
         }
@@ -126,8 +186,8 @@ namespace Blackjack
                 float alpha   = Mathf.Lerp(pulseMinAlpha, pulseMaxAlpha, t);
 
                 Color color = Color.Lerp(
-                    new Color(1.5f, 0.65f, 0.05f, alpha),
-                    new Color(4.0f, 3.5f,  0.6f,  alpha),
+                    new Color(0.95f, 0.72f, 0.08f, alpha),
+                    new Color(1.35f, 1.05f, 0.25f, alpha),
                     t);
 
                 glowImage.color = color;
