@@ -8,7 +8,7 @@
     "alwaysLoseEnabled": false,
     "volume": 1.0,
     "martingaleThreshold": 1,
-    "martingaleActive": true,
+    "martingaleActive": false,
     "martingaleAutoPlay": false,
     "showStrategyEnabled": false
 }

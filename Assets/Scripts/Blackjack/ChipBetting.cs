@@ -72,7 +72,7 @@ namespace Blackjack
         private const int DefaultMaxBet = BlackjackGame.BetLimit;
 
         [Header("Buttons")]
-        [Tooltip("Button that resets the bet to the minimum (one lowest-denomination chip).")]
+        [Tooltip("Button that clears all chips from the bet area.")]
         [SerializeField] private Button chipResetButton;
 
         [Tooltip("Sound played when the chip reset button is pressed.")]
@@ -232,36 +232,12 @@ namespace Blackjack
         {
             if (chipTypes.Count == 0) return;
 
-            int previousBet = TotalBet;
+            SetBet(SmallestChipValue);
 
-            // Clear all chips without firing the event yet
-            foreach (KeyValuePair<int, List<GameObject>> kvp in _stacks)
-                foreach (GameObject go in kvp.Value)
-                    if (go != null) Destroy(go);
-
-            _stacks.Clear();
-            _columnOrder.Clear();
-            _chipCounts.Clear();
-
-            // Place one minimum chip
-            int typeIndex    = 0;
-            int minimumValue = chipTypes[typeIndex].value;
-            PlaceChip(typeIndex);
-            CheckUpgrade(typeIndex);
-
-            // Fire a single delta: (minimumValue - previousBet)
-            int delta = minimumValue - previousBet;
-            if (delta != 0)
-                OnBetChanged?.Invoke(delta);
-
-            RefreshBetLabel();
+            if (TotalBet <= 0)
+                PlaceSmallestChip();
         }
 
-        /// <summary>
-        /// Rebuilds the bet area to represent exactly <paramref name="targetAmount"/> and fires
-        /// <see cref="OnBetChanged"/> with the signed delta so all listeners (money label, status)
-        /// stay in sync. Use this for programmatic bet changes d uring the betting phase.
-        /// </summary>
         /// <summary>
         /// Rebuilds the bet area to represent exactly <paramref name="targetAmount"/> and fires
         /// <see cref="OnBetChanged"/> with the signed delta so all listeners stay in sync.
@@ -291,14 +267,7 @@ namespace Blackjack
         {
             if (chipTypes.Count == 0 || targetAmount <= 0) return;
 
-            // Clear existing chips silently (no event)
-            foreach (KeyValuePair<int, List<GameObject>> kvp in _stacks)
-                foreach (GameObject go in kvp.Value)
-                    if (go != null) Destroy(go);
-
-            _stacks.Clear();
-            _columnOrder.Clear();
-            _chipCounts.Clear();
+            ClearAllBetChips();
 
             // Greedy decomposition: highest denomination first
             int remaining = targetAmount;
@@ -443,13 +412,7 @@ namespace Blackjack
         {
             int refund = TotalBet;
 
-            foreach (KeyValuePair<int, List<GameObject>> kvp in _stacks)
-                foreach (GameObject go in kvp.Value)
-                    if (go != null) Destroy(go);
-
-            _stacks.Clear();
-            _columnOrder.Clear();
-            _chipCounts.Clear();
+            ClearAllBetChips();
 
             if (refund != 0)
                 OnBetChanged?.Invoke(-refund);
@@ -472,21 +435,19 @@ namespace Blackjack
                     blackjackGame.CloseMenu(playSound: false);
                 }
 
-                if (blackjackGame.IsBetLimitStatusActive)
-                    return;
-
                 if (blackjackGame.IsRoundOver)
                     blackjackGame.PrepareForBetting();
                 else if (!blackjackGame.IsBettingAllowed)
                     return;
             }
 
-            if (TotalBet > SmallestChipValue)
-                chipResetSound.Play(audioSource);
-            else
+            if (TotalBet <= 0)
                 blackjackGame?.PlayKnockSound();
+            else
+                chipResetSound.Play(audioSource);
 
-            ResetToMinimumBet();
+            blackjackGame?.ClearBetLimitStatus();
+            ClearBetArea();
         }
 
         private void OnChipMaxClicked()
@@ -601,6 +562,26 @@ namespace Blackjack
             RemoveTopChips(typeIndex, 1);
             OnBetChanged?.Invoke(-chipValue);
             RefreshBetLabel();
+        }
+
+        /// <summary>Destroys every chip in the bet area and clears placement tracking.</summary>
+        private void ClearAllBetChips()
+        {
+            if (betArea != null)
+            {
+                for (int i = betArea.childCount - 1; i >= 0; i--)
+                {
+                    Transform child = betArea.GetChild(i);
+                    if (betSumLabel != null && child == betSumLabel.transform)
+                        continue;
+
+                    Destroy(child.gameObject);
+                }
+            }
+
+            _stacks.Clear();
+            _columnOrder.Clear();
+            _chipCounts.Clear();
         }
 
         /// <summary>Places one chip of the given type into the bet area.</summary>

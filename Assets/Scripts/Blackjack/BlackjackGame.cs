@@ -58,6 +58,15 @@ namespace Blackjack
         [Header("Status")]
         [SerializeField] private TextMeshProUGUI statusLabel;
         [SerializeField] private TextMeshProUGUI streakLabel;
+        [SerializeField] private TextMeshProUGUI martingaleModeLabel;
+
+        [Header("Player Info Labels")]
+        [Tooltip("Equal vertical gap in pixels between name, money, streak, and Martingale mode labels.")]
+        [SerializeField] private float playerInfoLabelGap = 8f;
+        [Tooltip("Anchored Y of the top player name label; the other three labels stack below it.")]
+        [SerializeField] private float playerInfoTopY = 303f;
+        [Tooltip("Font size for the Martingale mode label (uses the status label font at this size).")]
+        [SerializeField] private float martingaleModeFontSize = 22f;
 
         [Header("Money")]
         [SerializeField] private TextMeshProUGUI playerMoneyLabel;
@@ -180,6 +189,8 @@ namespace Blackjack
         // True after the player explicitly declines the Martingale popup. Suppresses re-prompting on Deal until the streak resets.
         private bool _martingaleDeclined;
 
+        private static readonly Color MartingaleModeGoldColor = new Color(1f, 0.85f, 0.3f, 1f);
+
         // Running score: +1 per win, -1 per loss, 0 for push or surrender.
         private int _playerScore;
 
@@ -291,6 +302,7 @@ namespace Blackjack
                 _betBeforeMartingale     = chipBetting != null ? chipBetting.TotalBet : 0;
                 _pendingMartingaleDouble = true;
                 menuController.DisableOverrideStrategy();
+                menuController.ActivateMartingale();
                 RefreshStreakLabel();
                 OnDeal();
                 return;
@@ -307,6 +319,7 @@ namespace Blackjack
                         _inMartingaleMode   = false;
                         _martingaleDeclined = true;
                         menuController?.DeactivateMartingale();
+                        RefreshStreakLabel();
                     }
                 );
             }
@@ -369,9 +382,9 @@ namespace Blackjack
             _lastRoundBet             = 0;
             _martingaleWin            = false;
             _playerWon                = false;
-            _martingalePopupShown     = false;
-            _inMartingaleMode         = false;
-            _pendingMartingaleDouble  = false;
+            _martingalePopupShown    = false;
+            _inMartingaleMode        = false;
+            _pendingMartingaleDouble = false;
             RefreshStreakLabel();
 
             // Restore the Override Strategy option in case Martingale mode was active.
@@ -460,10 +473,12 @@ namespace Blackjack
                 strategyTableUI.gameObject.SetActive(showStrategyTable);
 
             _deck.Build();
-            _defaultStatusColor = statusLabel.color;
+            if (statusLabel != null)
+                _defaultStatusColor = statusLabel.color;
             AlignStatusLabelToCardArea();
-            AlignStreakLabelToPlayerMoney();
             InitSplitScoreLabel();
+            InitMartingaleModeLabel();
+            AlignPlayerInfoLabels();
             SetScoreLabelsVisible(false);
             RefreshStreakLabel();
             SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
@@ -503,9 +518,38 @@ namespace Blackjack
         {
             if (_betLimitStatusLocked || IsLimitPulsing) return;
 
-            knockSound.Play(audioSource);
-            StartCoroutine(PulseLimitExceeded());
+            IsLimitPulsing = true;
+
+            bool alreadyAtMax = chipBetting != null && chipBetting.TotalBet == chipBetting.MaxBet;
+
+            if (!alreadyAtMax && chipBetting != null)
+                chipBetting.SetBet(chipBetting.MaxBet);
+
+            if (alreadyAtMax)
+                knockSound.Play(audioSource);
+            else
+                resetSound.Play(audioSource);
+
+            _limitPulseCoroutine = StartCoroutine(PulseLimitExceeded());
         }
+
+        /// <summary>Clears the bet-limit status lock and pulse so the player can change chips again.</summary>
+        public void ClearBetLimitStatus()
+        {
+            if (_limitPulseCoroutine != null)
+            {
+                StopCoroutine(_limitPulseCoroutine);
+                _limitPulseCoroutine = null;
+            }
+
+            IsLimitPulsing        = false;
+            _betLimitStatusLocked = false;
+
+            if (_state == GameState.Idle || _state == GameState.RoundOver)
+                SetStatus(CurrentBet > 0 ? "Press Deal to start" : "Place your bet");
+        }
+
+        private Coroutine _limitPulseCoroutine;
 
         private const int LimitPulseCount = 3;
         private const float LimitPulseDelay = 0.5f;
@@ -531,8 +575,9 @@ namespace Blackjack
             }
 
             SetStatus(BetLimitStatusMessage, LoseColor);
-            IsLimitPulsing = false;
+            IsLimitPulsing        = false;
             _betLimitStatusLocked = true;
+            _limitPulseCoroutine  = null;
         }
 
         // ──────────────────────────────────────────────────────────────────────────
@@ -601,6 +646,8 @@ namespace Blackjack
             _playerMoney -= CurrentBet;
             RefreshMoneyLabel();
             _state = GameState.PlayerTurn;
+            if (_inMartingaleMode)
+                RefreshMartingaleModeLabel();
             StartCoroutine(DealRound());
         }
 
@@ -1341,25 +1388,132 @@ namespace Blackjack
         }
 
         /// <summary>
-        /// Keeps the streak label horizontally centered on the same axis as the player money label.
+        /// Keeps player info labels on the same horizontal axis with equal vertical spacing between all four rows.
         /// </summary>
-        private void AlignStreakLabelToPlayerMoney()
+        private void AlignPlayerInfoLabels()
         {
-            if (streakLabel == null || playerMoneyLabel == null) return;
+            if (playerMoneyLabel == null) return;
 
-            RectTransform moneyRT  = playerMoneyLabel.rectTransform;
-            RectTransform streakRT = streakLabel.rectTransform;
+            Transform canvas = playerMoneyLabel.transform.parent;
+            if (canvas == null) return;
 
-            streakLabel.horizontalAlignment = HorizontalAlignmentOptions.Center;
-            streakLabel.margin              = playerMoneyLabel.margin;
+            EnsureMartingaleModeLabel();
+            if (martingaleModeLabel != null)
+            {
+                martingaleModeLabel.text = "Martingale Mode";
+                ApplyMartingaleModeLabelTypography(martingaleModeLabel);
+            }
 
-            Vector2 pos = streakRT.anchoredPosition;
+            TextMeshProUGUI playerLabel = canvas.Find("PlayerLabel")?.GetComponent<TextMeshProUGUI>();
+            AlignLabelToPlayerMoney(playerLabel);
+            AlignLabelToPlayerMoney(playerMoneyLabel);
+            AlignLabelToPlayerMoney(streakLabel);
+            AlignLabelToPlayerMoney(martingaleModeLabel);
+            AlignLabelToPlayerMoney(canvas.Find("DealerLabel")?.GetComponent<TextMeshProUGUI>());
+
+            float width = playerMoneyLabel.rectTransform.sizeDelta.x;
+            List<TextMeshProUGUI> rows = CollectVisiblePlayerInfoRows(playerLabel);
+            if (rows.Count == 0) return;
+
+            float rowHeight = ComputePlayerInfoRowHeight(rows);
+            for (int i = 0; i < rows.Count; i++)
+                FitPlayerInfoRow(rows[i], width, rowHeight);
+
+            Vector2 topPos = rows[0].rectTransform.anchoredPosition;
+            topPos.y       = playerInfoTopY;
+            rows[0].rectTransform.anchoredPosition = topPos;
+
+            for (int i = 1; i < rows.Count; i++)
+                StackLabelBelow(rows[i], rows[i - 1], playerInfoLabelGap);
+
+            martingaleModeLabel?.rectTransform.SetAsLastSibling();
+        }
+
+        private List<TextMeshProUGUI> CollectVisiblePlayerInfoRows(TextMeshProUGUI playerLabel)
+        {
+            var rows = new List<TextMeshProUGUI>(4);
+            if (playerLabel != null) rows.Add(playerLabel);
+            if (playerMoneyLabel != null) rows.Add(playerMoneyLabel);
+            if (streakLabel != null && streakLabel.gameObject.activeSelf) rows.Add(streakLabel);
+            if (martingaleModeLabel != null && IsMartingaleModeActive) rows.Add(martingaleModeLabel);
+            return rows;
+        }
+
+        private static float ComputePlayerInfoRowHeight(IReadOnlyList<TextMeshProUGUI> rows)
+        {
+            float height = 0f;
+            for (int i = 0; i < rows.Count; i++)
+                height = Mathf.Max(height, MeasureLabelHeight(rows[i]));
+            return height;
+        }
+
+        private static void FitPlayerInfoRow(TextMeshProUGUI label, float width, float rowHeight)
+        {
+            if (label == null) return;
+
+            label.rectTransform.sizeDelta = new Vector2(width, rowHeight);
+            label.verticalAlignment       = VerticalAlignmentOptions.Bottom;
+        }
+
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            if (Application.isPlaying || playerMoneyLabel == null)
+                return;
+
+            UnityEditor.EditorApplication.delayCall += () =>
+            {
+                if (this == null || playerMoneyLabel == null)
+                    return;
+
+                AlignPlayerInfoLabels();
+            };
+        }
+#endif
+
+        private static void StackLabelBelow(TextMeshProUGUI lower, TextMeshProUGUI upper, float gap)
+        {
+            if (lower == null || upper == null) return;
+
+            RectTransform lowerRT = lower.rectTransform;
+            RectTransform upperRT = upper.rectTransform;
+
+            lowerRT.anchorMin = upperRT.anchorMin;
+            lowerRT.anchorMax = upperRT.anchorMax;
+            lowerRT.pivot     = upperRT.pivot;
+
+            Vector2 pos = lowerRT.anchoredPosition;
+            pos.y       = upperRT.anchoredPosition.y - gap - lowerRT.sizeDelta.y;
+            lowerRT.anchoredPosition = pos;
+        }
+
+        private static float MeasureLabelHeight(TextMeshProUGUI label)
+        {
+            if (label == null) return 0f;
+            label.ForceMeshUpdate(true, true);
+            Bounds bounds = label.textBounds;
+            if (bounds.size.y > 0.01f)
+                return bounds.size.y;
+            return label.preferredHeight;
+        }
+
+        private void AlignLabelToPlayerMoney(TextMeshProUGUI label)
+        {
+            if (label == null || playerMoneyLabel == null) return;
+
+            RectTransform moneyRT = playerMoneyLabel.rectTransform;
+            RectTransform labelRT = label.rectTransform;
+
+            label.horizontalAlignment = HorizontalAlignmentOptions.Center;
+            label.margin              = playerMoneyLabel.margin;
+
+            Vector2 pos = labelRT.anchoredPosition;
             pos.x       = moneyRT.anchoredPosition.x;
-            streakRT.anchoredPosition = pos;
+            labelRT.anchoredPosition = pos;
 
-            Vector2 size = streakRT.sizeDelta;
+            Vector2 size = labelRT.sizeDelta;
             size.x       = moneyRT.sizeDelta.x;
-            streakRT.sizeDelta = size;
+            labelRT.sizeDelta = size;
         }
 
         /// <summary>Updates the streak label to show the current loss streak, total amount lost, and when in Martingale mode, the chip amount being added each round.</summary>
@@ -1377,6 +1531,100 @@ namespace Blackjack
             {
                 streakLabel.gameObject.SetActive(false);
             }
+
+            RefreshMartingaleModeLabel();
+        }
+
+        private void RefreshMartingaleModeLabel()
+        {
+            EnsureMartingaleModeLabel();
+            if (martingaleModeLabel == null) return;
+
+            bool showLabel = _inMartingaleMode;
+            if (!showLabel)
+            {
+                martingaleModeLabel.gameObject.SetActive(false);
+                AlignPlayerInfoLabels();
+                return;
+            }
+
+            martingaleModeLabel.gameObject.SetActive(true);
+            martingaleModeLabel.text = "Martingale Mode";
+            ApplyMartingaleModeLabelTypography(martingaleModeLabel);
+            AlignPlayerInfoLabels();
+            martingaleModeLabel.alpha = 1f;
+            martingaleModeLabel.ForceMeshUpdate(true, true);
+        }
+
+        private bool IsMartingaleModeActive => _inMartingaleMode;
+
+        private void EnsureMartingaleModeLabel()
+        {
+            if (martingaleModeLabel != null || streakLabel == null) return;
+
+            GameObject labelObj = new("Martingale Mode", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+            labelObj.transform.SetParent(streakLabel.transform.parent, false);
+
+            martingaleModeLabel = labelObj.GetComponent<TextMeshProUGUI>();
+            ApplyMartingaleModeLabelTypography(martingaleModeLabel);
+            martingaleModeLabel.text                = "Martingale Mode";
+            martingaleModeLabel.raycastTarget       = false;
+            martingaleModeLabel.horizontalAlignment = HorizontalAlignmentOptions.Center;
+            martingaleModeLabel.verticalAlignment   = VerticalAlignmentOptions.Middle;
+            martingaleModeLabel.enableWordWrapping  = false;
+            martingaleModeLabel.margin              = streakLabel.margin;
+
+            labelObj.SetActive(false);
+        }
+
+        private void ApplyMartingaleModeGoldColor(TextMeshProUGUI target)
+        {
+            if (target == null) return;
+
+            target.color = MartingaleModeGoldColor;
+            if (statusLabel != null)
+            {
+                target.outlineWidth = statusLabel.outlineWidth;
+                target.outlineColor = statusLabel.outlineColor;
+            }
+        }
+
+        private void ApplyMartingaleModeLabelTypography(TextMeshProUGUI target)
+        {
+            if (target == null || statusLabel == null) return;
+
+            target.font = statusLabel.font;
+            if (statusLabel.fontSharedMaterial != null)
+                target.fontSharedMaterial = statusLabel.fontSharedMaterial;
+            target.fontSize  = martingaleModeFontSize;
+            target.fontStyle = statusLabel.fontStyle;
+
+            target.enableVertexGradient  = false;
+            target.horizontalAlignment = HorizontalAlignmentOptions.Center;
+            target.verticalAlignment   = VerticalAlignmentOptions.Bottom;
+
+            ApplyMartingaleModeGoldColor(target);
+
+            if (target.font != null)
+                target.UpdateFontAsset();
+        }
+
+        private void ApplyStatusLabelTypography(TextMeshProUGUI target)
+        {
+            target.font               = statusLabel.font;
+            target.fontSharedMaterial = statusLabel.fontSharedMaterial;
+            target.fontSize           = statusLabel.fontSize;
+            target.fontStyle          = statusLabel.fontStyle;
+            target.color              = statusLabel.color;
+            target.UpdateFontAsset();
+        }
+
+        /// <summary>Creates the Martingale mode indicator beneath the streak label, using StatusLabel typography.</summary>
+        private void InitMartingaleModeLabel()
+        {
+            EnsureMartingaleModeLabel();
+            if (martingaleModeLabel != null)
+                martingaleModeLabel.gameObject.SetActive(false);
         }
 
         private IEnumerator ResolveRound()
@@ -1550,6 +1798,9 @@ namespace Blackjack
 
             if (!_doubleBJSoundPlaying && !_dealerNaturalBJPlaying && _state == GameState.RoundOver)
                 SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
+
+            if (_inMartingaleMode)
+                RefreshMartingaleModeLabel();
 
             // Show Martingale popup immediately when the threshold was just reached.
             if (_martingalePopupShown && !_inMartingaleMode && !_martingaleDeclined)

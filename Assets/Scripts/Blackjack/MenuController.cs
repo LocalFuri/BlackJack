@@ -9,7 +9,7 @@ namespace Blackjack
     /// <summary>
     /// Toggles the developer menu panel with F2.
     /// Controls visibility of the three test buttons and the master volume.
-    /// Settings are loaded from <c>options.json</c> on startup and saved when they change, when the menu closes, and on quit.
+    /// Menu settings are session-only; nothing is read from or written to disk.
     /// </summary>
     [RequireComponent(typeof(AudioSource))]
     public class MenuController : MonoBehaviour
@@ -40,7 +40,7 @@ namespace Blackjack
 
         [Header("Martingale Threshold")]
         [SerializeField] private Slider martingaleThresholdSlider;
-        [Tooltip("Starting Martingale loss-streak threshold when no saved settings file exists yet.")]
+        [Tooltip("Starting Martingale loss-streak threshold for a new session.")]
         [SerializeField] [Min(1)] private int defaultMartingaleThreshold = 4;
 
         [Header("Test Split Rank")]
@@ -71,9 +71,6 @@ namespace Blackjack
         /// <summary>Last threshold read from the slider; used to detect UI changes without relying on slider callbacks alone.</summary>
         private int _lastMartingaleThresholdFromSlider = int.MinValue;
 
-        /// <summary>Skips disk writes while programmatically applying loaded settings.</summary>
-        private bool _suppressPersistence;
-
         // ──────────────────────────────────────────────────────────────────────────
         // Unity lifecycle
         // ──────────────────────────────────────────────────────────────────────────
@@ -90,13 +87,11 @@ namespace Blackjack
             BindRowToggleReferences();
             EnsureToggleRowPlacement();
 
-            _settings = SettingsRepository.Load();
-
-            if (!SettingsRepository.Exists())
+            _settings = new OptionsSettings
             {
-                _settings.martingaleThreshold = defaultMartingaleThreshold;
-                _settings.showStrategyEnabled = blackjackGame != null && blackjackGame.ShowStrategyTable;
-            }
+                martingaleThreshold = defaultMartingaleThreshold,
+                showStrategyEnabled = blackjackGame != null && blackjackGame.ShowStrategyTable
+            };
 
             ApplySettings();
 
@@ -316,14 +311,10 @@ namespace Blackjack
         /// <summary>Plays the toggle click sound whenever any option checkbox changes value.</summary>
         private void OnToggleSoundPlay(bool _) => uiSounds?.toggleSound.Play(audioSource);
 
-        private void OnApplicationQuit() => PersistSettingsToFile();
-
         private void OnDestroy()
         {
             if (blackjackGame != null)
                 blackjackGame.OnAlwaysLoseDisabled -= DisableAlwaysLose;
-
-            PersistSettingsToFile();
         }
 
         // ──────────────────────────────────────────────────────────────────────────
@@ -668,48 +659,9 @@ namespace Blackjack
             if (playSound) blackjackGame?.PlayCloseSound();
         }
 
-        /// <summary>Reads live UI values into <see cref="_settings"/>.</summary>
-        private void CaptureSettingsFromUi()
-        {
-            if (_settings == null) return;
-
-            if (blackjackTestToggle != null) _settings.blackjackTestEnabled = blackjackTestToggle.isOn;
-            if (bjAllToggle != null) _settings.bjAllEnabled = bjAllToggle.isOn;
-            if (ddTestToggle != null) _settings.ddTestEnabled = ddTestToggle.isOn;
-            if (testSplitToggle != null) _settings.testSplitEnabled = testSplitToggle.isOn;
-            if (overrideStrategyToggle != null) _settings.overrideStrategyEnabled = overrideStrategyToggle.isOn;
-            if (alwaysLoseToggle != null) _settings.alwaysLoseEnabled = alwaysLoseToggle.isOn;
-
-            var showStrategy = GetShowStrategyRowToggle();
-            if (showStrategy != null) _settings.showStrategyEnabled = showStrategy.isOn;
-
-            var activeToggle = GetMartingaleActiveRowToggle();
-            if (activeToggle != null) _settings.martingaleActive = activeToggle.isOn;
-
-            var autoPlayToggle = GetMartingaleAutoPlayRowToggle();
-            if (autoPlayToggle != null) _settings.martingaleAutoPlay = autoPlayToggle.isOn;
-
-            if (volumeSlider != null)
-                _settings.volume = volumeSlider.value;
-
-            if (martingaleThresholdSlider != null)
-            {
-                _settings.martingaleThreshold = Mathf.RoundToInt(martingaleThresholdSlider.value);
-                _lastMartingaleThresholdFromSlider = _settings.martingaleThreshold;
-            }
-
-            var splitRankSlider = GetTestSplitRankSlider();
-            if (splitRankSlider != null)
-                _settings.testSplitRank = Mathf.RoundToInt(splitRankSlider.value);
-        }
-
-        /// <summary>Writes the current menu settings to <see cref="SettingsRepository"/>.</summary>
+        /// <summary>Session-only; settings are never written to disk.</summary>
         private void PersistSettingsToFile()
         {
-            if (_suppressPersistence || _settings == null) return;
-
-            CaptureSettingsFromUi();
-            SettingsRepository.Save(_settings);
         }
 
         /// <summary>Shows or hides the menu via CanvasGroup, keeping the GameObject always active so listeners survive.</summary>
@@ -725,8 +677,6 @@ namespace Blackjack
         /// <summary>Pushes all loaded settings into the UI and the AudioMixer.</summary>
         private void ApplySettings()
         {
-            _suppressPersistence = true;
-
             if (blackjackTestToggle != null)
                 blackjackTestToggle.SetIsOnWithoutNotify(_settings.blackjackTestEnabled);
             blackjackTestButton?.SetActive(_settings.blackjackTestEnabled);
@@ -788,8 +738,6 @@ namespace Blackjack
                 _settings.martingaleAutoPlay,
                 interactable: true);
             EnsureShowStrategyToggleUnlocked();
-
-            _suppressPersistence = false;
         }
 
         // Converts a linear [0,1] slider value to decibels for the AudioMixer.
