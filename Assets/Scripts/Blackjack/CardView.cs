@@ -33,20 +33,10 @@ namespace Blackjack
 
         private float _glowNoiseOffset;
 
-        private static readonly string[] LegacyPeekOverlayNames =
-        {
-            "CardCurlOverlay",
-            "PeekReveal",
-            "PeekUnderside",
-            "PeekShadow",
-            "PeekFlapClip",
-        };
-
         private void Awake()
         {
             if (cardImage == null) cardImage = GetComponent<Image>();
             _glowNoiseOffset = Random.Range(0f, 100f);
-            RemoveLegacyPeekOverlays();
             EnsureRectMask();
         }
 
@@ -58,9 +48,6 @@ namespace Blackjack
 
         public void Setup(Sprite faceSprite, Sprite backSprite, bool faceUp = true)
         {
-            RemoveLegacyPeekOverlays();
-            ResetCardTransform();
-
             _faceSprite      = faceSprite;
             _backSprite      = backSprite;
             _isFaceUp        = faceUp;
@@ -78,35 +65,8 @@ namespace Blackjack
             glowImage.preserveAspect = true;
         }
 
-        private void RemoveLegacyPeekOverlays()
-        {
-            for (int i = transform.childCount - 1; i >= 0; i--)
-            {
-                Transform child = transform.GetChild(i);
-                if (glowImage != null && child == glowImage.transform)
-                    continue;
-
-                foreach (string overlayName in LegacyPeekOverlayNames)
-                {
-                    if (child.name != overlayName)
-                        continue;
-
-                    Destroy(child.gameObject);
-                    break;
-                }
-            }
-        }
-
-        private void ResetCardTransform()
-        {
-            transform.localRotation = Quaternion.identity;
-        }
-
         public void Flip(bool toFaceUp, System.Action onComplete = null)
         {
-            RemoveLegacyPeekOverlays();
-            ResetCardTransform();
-
             if (_flipCoroutine != null) StopCoroutine(_flipCoroutine);
             _flipCoroutine = StartCoroutine(FlipRoutine(toFaceUp, onComplete));
         }
