@@ -17,14 +17,15 @@ namespace Blackjack
         [SerializeField] private float cardWorldWidth = 1.2f;
 
         [Header("Mesh Grid")]
-        [SerializeField] private int meshColumns = 12;
-        [SerializeField] private int meshRows = 16;
+        [SerializeField] private int meshColumns = 16;
+        [SerializeField] private int meshRows = 20;
 
         [Header("Corner Peek")]
-        [SerializeField] private float peekDuration = 0.15f;
-        [SerializeField] private float peekHoldDuration = 0.05f;
-        [SerializeField] private float returnDuration = 0.15f;
-        [SerializeField] private float cornerBendAmount = 0.12f;
+        [SerializeField] private float peekDuration = 0.25f;
+        [SerializeField] private float peekHoldDuration = 0.1f;
+        [SerializeField] private float returnDuration = 0.25f;
+        [SerializeField] private float cornerBendAmount = 0.14f;
+        [SerializeField] private AnimationCurve peekEase;
         [SerializeField] private float cornerRegionStart = 0.68f;
 
         [Header("Flip")]
@@ -60,6 +61,21 @@ namespace Blackjack
             _meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             _meshRenderer.receiveShadows = false;
             _meshRenderer.sortingOrder = 200;
+            EnsurePeekEaseCurve();
+        }
+
+        private void EnsurePeekEaseCurve()
+        {
+            if (peekEase != null && peekEase.length > 0)
+                return;
+
+            peekEase = new AnimationCurve(
+                new Keyframe(0f, 0f, 0f, 0f),
+                new Keyframe(1f, 1f, 0f, 0f));
+            for (int i = 0; i < peekEase.length; i++)
+            {
+                peekEase.SmoothTangents(i, 0.5f);
+            }
         }
 
         private void Start()
@@ -228,9 +244,11 @@ namespace Blackjack
                 yield break;
             }
 
+            EnsurePeekEaseCurve();
+
             for (float elapsed = 0f; elapsed < duration; elapsed += Time.deltaTime)
             {
-                float p = SmoothStep(Mathf.Clamp01(elapsed / duration));
+                float p = peekEase.Evaluate(Mathf.Clamp01(elapsed / duration));
                 float t = Mathf.Lerp(fromT, toT, p);
                 ApplyCornerBend(t);
                 yield return null;
@@ -272,8 +290,6 @@ namespace Blackjack
 
             SpriteCardMeshBuilder.ApplyVertices(_cardMesh, _restVertices);
         }
-
-        private static float SmoothStep(float t) => t * t * (3f - 2f * t);
 
         private void OnDestroy()
         {
