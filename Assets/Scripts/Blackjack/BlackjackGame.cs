@@ -958,7 +958,10 @@ namespace Blackjack
                 if (_dealerHoleCardView != null && !_dealerHoleCardView.IsFaceUp)
                     yield return StartCoroutine(RevealDealerHoleForNaturalBlackjack());
                 else
+                {
+                    PlayCardSlideSound();
                     UpdateScoreLabels(revealDealer: true);
+                }
 
                 yield return StartCoroutine(ApplyDealerNaturalBlackjackLossRoutine(CurrentBet, revealHole: false));
                 yield return StartCoroutine(EndRound());
@@ -1030,7 +1033,7 @@ namespace Blackjack
             _splitCardViews.Add(movedView);
             _splitHand.AddCard(movedCard);
 
-            cardSlideSound.Play(audioSource);
+            PlayCardSlideSound();
             yield return new WaitForSeconds(0.5f);
 
             bool isAces = _playerHand.Cards[0].Rank == Rank.Ace;
@@ -2175,6 +2178,8 @@ namespace Blackjack
             if (_dealerHoleCardView == null || _dealerHoleCardView.IsFaceUp)
                 yield break;
 
+            PlayCardSlideSound();
+
             if (_dealerHoleCardView is WorldCardView worldCard)
             {
                 yield return worldCard.DealerPeekHoleCardAnimation();
@@ -2188,6 +2193,9 @@ namespace Blackjack
 
         private IEnumerator RevealDealerHoleForNaturalBlackjack()
         {
+            if (IsNaturalBlackjack(_dealerHand))
+                PlayCardSlideSound();
+
             yield return StartCoroutine(RevealHoleCard());
             UpdateScoreLabels(revealDealer: true);
         }
@@ -2664,6 +2672,12 @@ namespace Blackjack
         }
 
         /// <summary>Plays the lose sound if both clip and source are assigned.</summary>
+        private void PlayCardSlideSound()
+        {
+            if (cardSlideSound.HasClip && audioSource != null)
+                cardSlideSound.Play(audioSource);
+        }
+
         private void PlayLoseSound()
         {
             loseSound.Play(audioSource);
