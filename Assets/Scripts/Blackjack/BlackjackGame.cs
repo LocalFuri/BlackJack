@@ -31,6 +31,8 @@ namespace Blackjack
 
         [Header("Card Prefab")]
         [SerializeField] private GameObject cardViewPrefab;
+        [SerializeField] private bool useWorldSpaceCards = true;
+        [SerializeField] private GameObject worldCardPrefab;
 
         [Header("Buttons")]
         [SerializeField] private Button dealButton;
@@ -149,11 +151,11 @@ namespace Blackjack
         private readonly Hand _dealerHand    = new();
         private readonly Hand _splitHand     = new();
 
-        private readonly List<CardView> _playerCardViews = new();
-        private readonly List<CardView> _splitCardViews  = new();
-        private readonly List<CardView> _dealerCardViews = new();
+        private readonly List<ICardDisplay> _playerCardViews = new();
+        private readonly List<ICardDisplay> _splitCardViews  = new();
+        private readonly List<ICardDisplay> _dealerCardViews = new();
 
-        private CardView _dealerHoleCardView;
+        private ICardDisplay _dealerHoleCardView;
 
         private bool _forcePlayerBlackjack;
         private bool _forceBothBlackjack;
@@ -223,7 +225,7 @@ namespace Blackjack
         private const float DoubleDownVerticalLift = 50f;
 
     private Hand           ActiveHand  => _activeHandIndex == 0 ? _playerHand  : _splitHand;
-        private List<CardView> ActiveViews => _activeHandIndex == 0 ? _playerCardViews : _splitCardViews;
+        private List<ICardDisplay> ActiveViews => _activeHandIndex == 0 ? _playerCardViews : _splitCardViews;
 
         private enum GameState { Idle, PlayerTurn, DealerTurn, RoundOver }
         private GameState _state = GameState.Idle;
@@ -894,6 +896,9 @@ namespace Blackjack
             _dealerHoleCardView = _dealerCardViews[^1];
             UpdateScoreLabels(revealDealer: false);
 
+            if (ShouldDealerPeek())
+                yield return StartCoroutine(DealerPeekHoleCardCheck());
+
             // ── Natural blackjack check (both dealer cards are already in the hand) ──
             bool playerNatural = IsNaturalBlackjack(_playerHand);
             bool dealerNatural = IsNaturalBlackjack(_dealerHand);
@@ -1008,11 +1013,20 @@ namespace Blackjack
             CardData movedCard = _playerHand.Cards[1];
             _playerHand.RemoveAt(1);
 
-            CardView movedView = _playerCardViews[1];
+            ICardDisplay movedView = _playerCardViews[1];
             _playerCardViews.RemoveAt(1);
 
-            // Move card[1] to split card area
-            movedView.transform.SetParent(splitCardArea, worldPositionStays: false);
+            Transform splitParent = ResolveCardSpawnParent(splitCardArea);
+            Transform movedTransform = GetTransform(movedView);
+            if (movedTransform != null && splitParent != null)
+                movedTransform.SetParent(splitParent, false);
+
+            if (useWorldSpaceCards)
+            {
+                splitParent?.GetComponent<WorldCardRowLayout>()?.RefreshLayout();
+                ResolveCardSpawnParent(playerCardArea)?.GetComponent<WorldCardRowLayout>()?.RefreshLayout();
+            }
+
             _splitCardViews.Add(movedView);
             _splitHand.AddCard(movedCard);
 
@@ -1829,7 +1843,7 @@ namespace Blackjack
         // ──────────────────────────────────────────────────────────────────────────
 
         private IEnumerator DealCardTo(
-            Hand hand, List<CardView> views, Transform area, bool faceUp, bool doubleDownPlacement = false)
+            Hand hand, List<ICardDisplay> views, Transform area, bool faceUp, bool doubleDownPlacement = false)
         {
             yield return new WaitForSeconds(dealDelay);
 
@@ -1838,21 +1852,21 @@ namespace Blackjack
             if (dealCardSound.HasClip && audioSource != null)
                 dealCardSound.Play(audioSource);
 
-            if (doubleDownPlacement)
+            if (doubleDownPlacement && !useWorldSpaceCards)
             {
                 FreezeAreaLayout(area);
                 for (int i = 0; i < views.Count; i++)
-                    EnsureIgnoreLayout(views[i].GetComponent<RectTransform>());
+                    EnsureIgnoreLayout(GetRectTransform(views[i]));
             }
 
-            CardView view = SpawnCardView(card, area, faceUp: false, ignoreLayout: doubleDownPlacement);
+            ICardDisplay view = SpawnCardView(card, area, faceUp: false, ignoreLayout: doubleDownPlacement);
             if (view == null)
                 yield break;
 
             hand.AddCard(card);
             views.Add(view);
 
-            if (doubleDownPlacement && views.Count >= 3)
+            if (doubleDownPlacement && views.Count >= 3 && !useWorldSpaceCards)
                 ApplyDoubleDownLayout(views[0], views[1], view);
 
             if (faceUp)
@@ -1865,9 +1879,16 @@ namespace Blackjack
             if (doubleDownPlacement && views.Count >= 3)
             {
                 yield return null;
-                Canvas.ForceUpdateCanvases();
-                yield return new WaitForEndOfFrame();
-                ApplyDoubleDownLayout(views[0], views[1], view);
+                if (useWorldSpaceCards)
+                {
+                    ApplyWorldDoubleDownLayout(area, views[0], views[1], view);
+                }
+                else
+                {
+                    Canvas.ForceUpdateCanvases();
+                    yield return new WaitForEndOfFrame();
+                    ApplyDoubleDownLayout(views[0], views[1], view);
+                }
             }
         }
 
@@ -1890,15 +1911,32 @@ namespace Blackjack
             }
         }
 
+        private void ApplyWorldDoubleDownLayout(
+            Transform area, ICardDisplay firstCard, ICardDisplay secondCard, ICardDisplay doubleDownCard)
+        {
+            Transform spawnParent = ResolveCardSpawnParent(area);
+            WorldCardRowLayout layout = spawnParent != null
+                ? spawnParent.GetComponent<WorldCardRowLayout>()
+                : null;
+
+            if (layout == null)
+                return;
+
+            layout.ApplyDoubleDownLayout(
+                GetTransform(firstCard),
+                GetTransform(secondCard),
+                GetTransform(doubleDownCard));
+        }
+
         private void ApplyDoubleDownLayout(
-            CardView firstCard, CardView secondCard, CardView doubleDownCard)
+            ICardDisplay firstCard, ICardDisplay secondCard, ICardDisplay doubleDownCard)
         {
             if (firstCard == null || secondCard == null || doubleDownCard == null)
                 return;
 
-            RectTransform firstRt  = firstCard.GetComponent<RectTransform>();
-            RectTransform secondRt = secondCard.GetComponent<RectTransform>();
-            RectTransform thirdRt  = doubleDownCard.GetComponent<RectTransform>();
+            RectTransform firstRt  = GetRectTransform(firstCard);
+            RectTransform secondRt = GetRectTransform(secondCard);
+            RectTransform thirdRt  = GetRectTransform(doubleDownCard);
 
             EnsureIgnoreLayout(thirdRt);
             PlaceDoubleDownCard(firstRt, secondRt, thirdRt);
@@ -2026,37 +2064,67 @@ namespace Blackjack
             UnityEngine.Object.Destroy(anchor.gameObject);
         }
 
-        private static void DestroyCardViews(System.Collections.Generic.List<CardView> views)
+        private static void DestroyCardViews(System.Collections.Generic.List<ICardDisplay> views)
         {
             for (int i = views.Count - 1; i >= 0; i--)
             {
-                CardView view = views[i];
-                if (view == null) continue;
-                UnityEngine.Object.Destroy(view.gameObject);
+                ICardDisplay view = views[i];
+                if (view is MonoBehaviour behaviour && behaviour != null)
+                    UnityEngine.Object.Destroy(behaviour.gameObject);
             }
             views.Clear();
         }
 
-        private CardView SpawnCardView(CardData card, Transform parent, bool faceUp, bool ignoreLayout = false)
+        private ICardDisplay SpawnCardView(CardData card, Transform area, bool faceUp, bool ignoreLayout = false)
         {
-            if (cardViewPrefab == null || parent == null)
+            GameObject prefab = ResolveCardPrefab();
+            Transform parent = ResolveCardSpawnParent(area);
+
+            if (prefab == null || parent == null)
             {
-                Debug.LogError("BlackjackGame: cardViewPrefab or card area is not assigned.");
+                Debug.LogError("BlackjackGame: card prefab or card area is not assigned.");
                 return null;
             }
 
-            GameObject go = Instantiate(cardViewPrefab, parent, false);
+            GameObject go = Instantiate(prefab, parent, false);
             go.SetActive(true);
             go.name = ignoreLayout ? "DoubleDownCard" : "CardView";
 
-            RectTransform rt = go.GetComponent<RectTransform>();
-            if (ignoreLayout)
+            if (!useWorldSpaceCards)
             {
-                EnsureIgnoreLayout(rt);
-                SyncDoubleDownCardSize(rt);
+                RectTransform rt = go.GetComponent<RectTransform>();
+                if (ignoreLayout && rt != null)
+                {
+                    EnsureIgnoreLayout(rt);
+                    SyncDoubleDownCardSize(rt);
+                }
+            }
+            else
+            {
+                WorldCardRowLayout layout = parent.GetComponent<WorldCardRowLayout>();
+                if (layout != null)
+                {
+                    if (area is RectTransform areaRt)
+                        WorldCardAreaBootstrap.EnsureWorldArea(area, area.name + "_World");
+                    layout.RefreshLayout();
+                }
             }
 
-            CardView view = go.GetComponent<CardView>();
+            ICardDisplay view = go.GetComponent<ICardDisplay>();
+            if (view == null)
+            {
+                Debug.LogError("BlackjackGame: card prefab is missing ICardDisplay (WorldCardView or CardView).");
+                Destroy(go);
+                return null;
+            }
+
+            if (useWorldSpaceCards && view is WorldCardView worldCard)
+            {
+                WorldCardRowLayout rowLayout = parent.GetComponent<WorldCardRowLayout>();
+                if (rowLayout != null)
+                    worldCard.SetCardWorldWidth(rowLayout.CardWorldWidth);
+            }
+
             view.Setup(
                 spriteRegistry.GetSprite(card),
                 spriteRegistry.GetBackSprite(),
@@ -2064,9 +2132,59 @@ namespace Blackjack
             return view;
         }
 
+        private GameObject ResolveCardPrefab()
+        {
+            if (useWorldSpaceCards && worldCardPrefab != null)
+                return worldCardPrefab;
+            return cardViewPrefab;
+        }
+
+        private Transform ResolveCardSpawnParent(Transform area)
+        {
+            if (!useWorldSpaceCards)
+                return area;
+
+            return WorldCardAreaBootstrap.EnsureWorldArea(area, area.name + "_World");
+        }
+
+        private static Transform GetTransform(ICardDisplay card)
+        {
+            return card is MonoBehaviour behaviour ? behaviour.transform : null;
+        }
+
+        private static RectTransform GetRectTransform(ICardDisplay card)
+        {
+            return card is MonoBehaviour behaviour ? behaviour.GetComponent<RectTransform>() : null;
+        }
+
         // ──────────────────────────────────────────────────────────────────────────
         // Hole Card
         // ──────────────────────────────────────────────────────────────────────────
+
+        private bool ShouldDealerPeek()
+        {
+            if (_dealerHand.Count == 0)
+                return false;
+
+            Rank upcard = _dealerHand.Cards[0].Rank;
+            return upcard == Rank.Ace || (int)upcard >= (int)Rank.Ten;
+        }
+
+        private IEnumerator DealerPeekHoleCardCheck()
+        {
+            if (_dealerHoleCardView == null || _dealerHoleCardView.IsFaceUp)
+                yield break;
+
+            if (_dealerHoleCardView is WorldCardView worldCard)
+            {
+                yield return worldCard.DealerPeekHoleCardAnimation();
+                yield break;
+            }
+
+            DealerPeekAnimation legacyPeek = GetTransform(_dealerHoleCardView)?.GetComponent<DealerPeekAnimation>();
+            if (legacyPeek != null)
+                yield return legacyPeek.DealerPeekHoleCardAnimation();
+        }
 
         private IEnumerator RevealDealerHoleForNaturalBlackjack()
         {
@@ -2206,15 +2324,15 @@ namespace Blackjack
 
         private void ApplyBlackjackGlow() => ApplyBlackjackGlow(_playerCardViews);
 
-        private void ApplyBlackjackGlow(IReadOnlyList<CardView> cardViews)
+        private void ApplyBlackjackGlow(IReadOnlyList<ICardDisplay> cardViews)
         {
-            foreach (CardView v in cardViews)
+            foreach (ICardDisplay v in cardViews)
                 v?.StartGlowPulse();
         }
 
-        private void StopBlackjackGlow(IReadOnlyList<CardView> cardViews)
+        private void StopBlackjackGlow(IReadOnlyList<ICardDisplay> cardViews)
         {
-            foreach (CardView v in cardViews)
+            foreach (ICardDisplay v in cardViews)
                 v?.StopGlowPulse();
         }
 
@@ -2227,9 +2345,9 @@ namespace Blackjack
             if (audioSource != null)
                 audioSource.Stop();
 
-            foreach (CardView v in _playerCardViews)
+            foreach (ICardDisplay v in _playerCardViews)
                 v?.StopGlowPulse();
-            foreach (CardView v in _dealerCardViews)
+            foreach (ICardDisplay v in _dealerCardViews)
                 v?.StopGlowPulse();
         }
 
@@ -2539,7 +2657,7 @@ namespace Blackjack
             return longestDuration;
         }
 
-        private IEnumerator StopGlowAfterClip(float duration, IReadOnlyList<CardView> cardViews)
+        private IEnumerator StopGlowAfterClip(float duration, IReadOnlyList<ICardDisplay> cardViews)
         {
             yield return new WaitForSeconds(duration);
             StopBlackjackGlow(cardViews);

@@ -2809,6 +2809,8 @@ MonoBehaviour:
   splitCardArea: {fileID: 1624901225}
   dealerCardArea: {fileID: 690219125}
   cardViewPrefab: {fileID: 4577850078145282559, guid: 09bd14fdcef057348a61551a212f6b12, type: 3}
+  useWorldSpaceCards: 1
+  worldCardPrefab: {fileID: 8012345678901234567, guid: c2f9e7d6481a5937b4c5d6e7f8091a2b, type: 3}
   dealButton: {fileID: 327723775}
   hitButton: {fileID: 2118831507}
   standButton: {fileID: 1070746305}

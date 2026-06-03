@@ -8,7 +8,7 @@ namespace Blackjack
     /// Controls a single card UI element: face/back display, flip animation, and bloom glow effect.
     /// </summary>
     [RequireComponent(typeof(Image))]
-    public class CardView : MonoBehaviour
+    public class CardView : MonoBehaviour, ICardDisplay
     {
         [Header("References")]
         [SerializeField] private Image cardImage;
