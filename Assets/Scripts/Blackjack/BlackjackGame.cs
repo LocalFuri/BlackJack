@@ -991,10 +991,7 @@ namespace Blackjack
             _dealerUpcardSnapshot = _dealerHand.Cards[0];
             bool hasPair = CanSplit();
 
-            // Highlight the recommended cell in the strategy table (if visible).
-            strategyTableUI?.HighlightRecommendation(
-                _playerHand, _dealerUpcardSnapshot,
-                canSplit: hasPair, canDouble: CanDoubleDown(), canSurrender: true);
+            RefreshStrategyHighlight();
 
             if (!hasPair && _playerHand.BestValue() <= AutoHitMaxScore)
             {
@@ -1074,6 +1071,7 @@ namespace Blackjack
 
             SetButtonState(dealEnabled: false, actionEnabled: true, splitEnabled: false, doubleDownEnabled: CanDoubleDown());
             SetStatus($"Players turn Hand 1");
+            RefreshStrategyHighlight();
 
             if (ActiveHand.BestValue() <= AutoHitMaxScore)
             {
@@ -1150,6 +1148,7 @@ namespace Blackjack
                 UpdateScoreLabels(revealDealer: false);
                 SetStatus($"Players turn Hand 2");
                 SetButtonState(dealEnabled: false, actionEnabled: true, splitEnabled: false, doubleDownEnabled: CanDoubleDown());
+                RefreshStrategyHighlight();
 
                 if (ActiveHand.BestValue() <= AutoHitMaxScore)
                 {
@@ -1190,9 +1189,7 @@ namespace Blackjack
             yield return StartCoroutine(DealCardTo(ActiveHand, ActiveViews, area, faceUp: true));
             UpdateScoreLabels(revealDealer: false);
 
-            strategyTableUI?.HighlightRecommendation(
-                ActiveHand, _dealerUpcardSnapshot,
-                canSplit: false, canDouble: CanDoubleDown(), canSurrender: CanSurrender());
+            RefreshStrategyHighlight();
 
             int score = ActiveHand.BestValue();
 
@@ -2212,6 +2209,20 @@ namespace Blackjack
         // ──────────────────────────────────────────────────────────────────────────
         // UI Helpers
         // ──────────────────────────────────────────────────────────────────────────
+
+        private void RefreshStrategyHighlight()
+        {
+            if (strategyTableUI == null || !showStrategyTable)
+                return;
+
+            Hand hand = _isSplitRound ? ActiveHand : _playerHand;
+            strategyTableUI.HighlightRecommendation(
+                hand,
+                _dealerUpcardSnapshot,
+                canSplit: CanSplit(),
+                canDouble: CanDoubleDown(),
+                canSurrender: CanSurrender());
+        }
 
         private void UpdateScoreLabels(bool revealDealer)
         {

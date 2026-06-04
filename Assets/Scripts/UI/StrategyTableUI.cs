@@ -76,7 +76,10 @@ namespace Blackjack.UI
             ("11", new[]{ Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D }),
             ("10", new[]{ Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.H, Act.H }),
             ("9",  new[]{ Act.H, Act.D, Act.D, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
-            ("8 to 2", new[]{ Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H }),
+            ("8",  new[]{ Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H }),
+            ("7",  new[]{ Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H }),
+            ("6",  new[]{ Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H }),
+            ("5 or less", new[]{ Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H }),
         };
 
         private static readonly (string label, Act[] cols)[] PairRows =
@@ -472,7 +475,10 @@ namespace Blackjack.UI
             if (total == 11) return 6;
             if (total == 10) return 7;
             if (total == 9)  return 8;
-            return 9;
+            if (total == 8)  return 9;
+            if (total == 7)  return 10;
+            if (total == 6)  return 11;
+            return 12;
         }
 
         private static int PairRowIndex(int pairKey)

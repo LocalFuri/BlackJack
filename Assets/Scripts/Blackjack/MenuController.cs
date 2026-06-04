@@ -309,6 +309,7 @@ namespace Blackjack
 
             if (_menuVisible)
             {
+                if (!IsPointerOverMenuPanel()) return;
                 CloseMenuInternal(playSound: true);
                 return;
             }
@@ -319,20 +320,26 @@ namespace Blackjack
             if (blackjackGame != null && !blackjackGame.IsBettingAllowed && !blackjackGame.IsRoundOver)
                 return;
 
+            if (!IsPointerOverMenuPanel()) return;
+
+            SetMenuVisible(true);
+            SyncMartingaleThresholdFromSlider();
+            uiSounds?.toggleSound.Play(audioSource);
+        }
+
+        private bool IsPointerOverMenuPanel()
+        {
+            if (_menuRectTransform == null || Mouse.current == null) return false;
+
             Canvas canvas = _menuRectTransform.GetComponentInParent<Canvas>();
             Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
                 ? canvas.worldCamera
                 : null;
 
-            if (!RectTransformUtility.RectangleContainsScreenPoint(
-                    _menuRectTransform,
-                    Mouse.current.position.ReadValue(),
-                    uiCamera))
-                return;
-
-            SetMenuVisible(true);
-            SyncMartingaleThresholdFromSlider();
-            uiSounds?.toggleSound.Play(audioSource);
+            return RectTransformUtility.RectangleContainsScreenPoint(
+                _menuRectTransform,
+                Mouse.current.position.ReadValue(),
+                uiCamera);
         }
 
         private void ShowStrategyTable()
