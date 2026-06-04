@@ -2177,8 +2177,7 @@ namespace Blackjack
         {
             if (_dealerHoleCardView == null || _dealerHoleCardView.IsFaceUp)
                 yield break;
-
-            PlayCardSlideSound();
+      
 
             if (_dealerHoleCardView is WorldCardView worldCard)
             {
@@ -2194,8 +2193,6 @@ namespace Blackjack
         private IEnumerator RevealDealerHoleForNaturalBlackjack()
         {
             if (IsNaturalBlackjack(_dealerHand))
-                PlayCardSlideSound();
-
             yield return StartCoroutine(RevealHoleCard());
             UpdateScoreLabels(revealDealer: true);
         }
@@ -2671,8 +2668,8 @@ namespace Blackjack
             StopBlackjackGlow(cardViews);
         }
 
-        /// <summary>Plays the lose sound if both clip and source are assigned.</summary>
-        private void PlayCardSlideSound()
+    /// <summary>Plays the lose sound if both clip and source are assigned.</summary>
+      private void PlayCardSlideSound()
         {
             if (cardSlideSound.HasClip && audioSource != null)
                 cardSlideSound.Play(audioSource);

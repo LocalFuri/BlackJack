@@ -2865,6 +2865,9 @@ MonoBehaviour:
   knockSound:
     clip: {fileID: 8300000, guid: babd8fa50fa977f4881b58111a1ab364, type: 3}
     volume: 0.47
+  peekSound:
+    clip: {fileID: 8300000, guid: cee475322378fb243a9e24217fa24bd6, type: 3}
+    volume: 0.1
   loseSound:
     clip: {fileID: 8300000, guid: d2d47448e3808304fb70067a429664b8, type: 3}
     volume: 1
@@ -2895,7 +2898,6 @@ MonoBehaviour:
   endRoundDelay: 0
   newRoundPause: 0.5
   controls: {fileID: 11400000, guid: 5599a331733b13a4e8a7f08b7c64714c, type: 2}
-  bloomVolume: {fileID: 0}
 --- !u!114 &383358999
 MonoBehaviour:
   m_ObjectHideFlags: 0
