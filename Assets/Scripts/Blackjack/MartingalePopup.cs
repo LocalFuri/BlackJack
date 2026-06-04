@@ -26,11 +26,7 @@ namespace Blackjack
 
         private void Awake()
         {
-            // Force this popup to always render on top of world-space cards.
-            Canvas overlayCanvas = gameObject.AddComponent<Canvas>();
-            overlayCanvas.overrideSorting = true;
-            overlayCanvas.sortingOrder    = 300;
-            gameObject.AddComponent<GraphicRaycaster>();
+            UiOverlaySorting.Apply(gameObject, UiOverlaySorting.MartingalePopup);
 
             doItButton.onClick.AddListener(OnDoItClicked);
             reconsiderButton.onClick.AddListener(OnReconsiderClicked);

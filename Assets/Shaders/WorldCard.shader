@@ -10,7 +10,7 @@ Shader "Blackjack/WorldCard"
     {
         Tags
         {
-            "Queue" = "Overlay"
+            "Queue" = "Transparent"
             "RenderType" = "Transparent"
             "IgnoreProjector" = "True"
         }

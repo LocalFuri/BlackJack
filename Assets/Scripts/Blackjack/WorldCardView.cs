@@ -60,7 +60,7 @@ namespace Blackjack
             _meshRenderer = GetComponent<MeshRenderer>();
             _meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             _meshRenderer.receiveShadows = false;
-            _meshRenderer.sortingOrder = 200;
+            _meshRenderer.sortingOrder = 100;
             EnsurePeekEaseCurve();
         }
 
@@ -153,7 +153,7 @@ namespace Blackjack
                 }
 
                 _cardMaterial = new Material(shader);
-                _cardMaterial.renderQueue = 4000;
+                _cardMaterial.renderQueue = 3000;
                 _meshRenderer.material = _cardMaterial;
             }
 

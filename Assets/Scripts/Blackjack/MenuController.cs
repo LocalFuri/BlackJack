@@ -90,6 +90,7 @@ namespace Blackjack
             {
                 _menuCanvasGroup   = menuPanel.GetComponent<CanvasGroup>();
                 _menuRectTransform = menuPanel.GetComponent<RectTransform>();
+                UiOverlaySorting.Apply(menuPanel, UiOverlaySorting.Menu);
             }
 
             BindRowToggleReferences();

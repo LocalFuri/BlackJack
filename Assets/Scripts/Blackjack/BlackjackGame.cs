@@ -112,6 +112,7 @@ namespace Blackjack
     private bool _dealerNaturalBJPlaying;
     private float _fireworksEndTime;
         private float _winSoundEndTime;
+        private bool _winPresentationComplete;
 
     private float _dealerNaturalBJEndTime;
 
@@ -314,15 +315,31 @@ namespace Blackjack
                 martingalePopup.Show(
                     "Play Martingale ?",
                     onDoIt: EnterMartingaleFromPopupConfirm,
-                    onReconsider: () =>
-                    {
-                        _inMartingaleMode   = false;
-                        _martingaleDeclined = true;
-                        menuController?.DeactivateMartingale();
-                        RefreshStreakLabel();
-                    }
-                );
+                    onReconsider: OnMartingaleDeclined);
             }
+        }
+
+        /// <summary>
+        /// Decline on the Martingale popup: skip Martingale and deal the next round.
+        /// </summary>
+        private void OnMartingaleDeclined()
+        {
+            _inMartingaleMode        = false;
+            _pendingMartingaleDouble = false;
+            _martingaleDeclined      = true;
+            menuController?.DeactivateMartingale();
+            RefreshStreakLabel();
+            StartCoroutine(DealAfterMartingaleDeclined());
+        }
+
+        private IEnumerator DealAfterMartingaleDeclined()
+        {
+            yield return null;
+
+            if (_state != GameState.Idle && _state != GameState.RoundOver)
+                _state = GameState.RoundOver;
+
+            OnDeal();
         }
 
         /// <summary>
@@ -440,7 +457,7 @@ namespace Blackjack
 
                 _pendingMartingaleDouble = false;
                 martingaleBetLimitExceeded = !chipBetting.DoubleBetChips(
-                    playSound: false, enforceMaxBet: true, notifyLimitExceeded: false);
+                    playSound: true, enforceMaxBet: true, notifyLimitExceeded: false);
             }
 
      
@@ -880,6 +897,7 @@ namespace Blackjack
             if (_forceDealerBlackjack) { _deck.ForceDealerBlackjack(); _forceDealerBlackjack = false; }
 
             ClearTable();
+            _winPresentationComplete = false;
             SetStatus("");
             _doubleDownExtraBet = 0;
             yield return new WaitForSeconds(newRoundPause); //mark1
@@ -1795,7 +1813,7 @@ namespace Blackjack
                 ? _betBeforeMartingale
                 : chipBetting.SmallestChipValue;
 
-            chipBetting.SetBet(targetBet, playSound: true);
+            chipBetting.SetBet(targetBet, playSound: false);
             chipBetting.SnapshotBet();
             _betBeforeMartingale = 0;
             _martingaleWin       = false;
@@ -1809,17 +1827,21 @@ namespace Blackjack
             SetButtonState(dealEnabled: false, actionEnabled: false, splitEnabled: false);
             strategyTableUI?.ClearHighlight();
 
-            bool restoredPreMartingaleBet = ApplyPendingWinBetRestore();
-
             yield return new WaitForSeconds(endRoundDelay);
             chipBetting?.ResetMaxBet();
             chipBetting?.ClampBetToMaxBet();
 
-            if (!restoredPreMartingaleBet)
+            if (_playerWon)
             {
-                float soundRemaining = _winSoundEndTime - Time.time;
-                if (soundRemaining > 0f)
-                    yield return new WaitForSeconds(soundRemaining);
+                while (!_winPresentationComplete)
+                    yield return null;
+
+                float chipRemaining = _winSoundEndTime - Time.time;
+                if (chipRemaining > 0f)
+                    yield return new WaitForSeconds(chipRemaining);
+            }
+            else
+            {
                 chipBetting?.RestoreBetFromSnapshot();
             }
 
@@ -2429,14 +2451,14 @@ namespace Blackjack
         }
 
         /// <summary>
-        /// Plays the win sound (or Martingale/natural-BJ celebration), waits for the clip to finish,
-        /// then plays <see cref="chipSound"/> and signals <see cref="EndRound"/> to update the bet
-        /// area simultaneously via <see cref="_winSoundEndTime"/>.
+        /// Plays win audio, waits for it to finish, updates money and bet labels, then plays chip sound.
         /// Pass <paramref name="useCelebration"/> for Martingale wins and natural blackjacks.
         /// Pass <paramref name="playResetSound"/> only for Martingale wins.
         /// </summary>
         private IEnumerator PlayWinAndChipRoutine(bool useCelebration = false, bool playResetSound = false)
         {
+            _winPresentationComplete = false;
+
             if (useCelebration)
             {
                 ApplyBlackjackGlow();
@@ -2444,8 +2466,7 @@ namespace Blackjack
                 SpawnFireworks(celebrationDuration);
                 if (playResetSound)
                     StartCoroutine(PlayResetSoundAfterDelay(celebrationDuration));
-                // Bet area restore fires when the celebration ends — same moment as the chip sound.
-                _winSoundEndTime = Time.time + celebrationDuration;
+
                 if (celebrationDuration > 0f)
                     yield return new WaitForSeconds(celebrationDuration);
                 else
@@ -2453,15 +2474,23 @@ namespace Blackjack
             }
             else
             {
-                _winSoundEndTime = Time.time + winSound.Length + chipSound.Length;
                 PlayWinSound();
                 if (winSound.Length > 0f)
                     yield return new WaitForSeconds(winSound.Length);
                 else
                     yield return null;
             }
+
             RefreshMoneyLabel();
-            chipSound.Play(audioSource);
+
+            if (!ApplyPendingWinBetRestore())
+                chipBetting?.RestoreBetFromSnapshot();
+
+            if (chipSound.HasClip && audioSource != null)
+                chipSound.Play(audioSource);
+
+            _winSoundEndTime = Time.time + chipSound.Length;
+            _winPresentationComplete = true;
         }
         private IEnumerator PlayResetSoundAfterDelay(float delay)
         {
