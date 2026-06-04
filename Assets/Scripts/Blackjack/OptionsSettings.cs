@@ -1,8 +1,12 @@
+using System;
+
 namespace Blackjack
 {
     /// <summary>
-    /// Plain data container for menu settings (session-only; not persisted to disk).
+    /// Plain data container for all menu settings.
+    /// Inspector defaults are applied first; if a save file exists it overrides those values on load.
     /// </summary>
+    [Serializable]
     public class OptionsSettings
     {
         public bool  blackjackTestEnabled    = true;

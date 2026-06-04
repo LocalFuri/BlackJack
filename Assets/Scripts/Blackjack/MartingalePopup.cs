@@ -29,7 +29,7 @@ namespace Blackjack
             // Force this popup to always render on top of world-space cards.
             Canvas overlayCanvas = gameObject.AddComponent<Canvas>();
             overlayCanvas.overrideSorting = true;
-            overlayCanvas.sortingOrder    = 100;
+            overlayCanvas.sortingOrder    = 300;
             gameObject.AddComponent<GraphicRaycaster>();
 
             doItButton.onClick.AddListener(OnDoItClicked);

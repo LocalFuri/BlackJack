@@ -21,6 +21,7 @@ namespace Blackjack
 
         [Header("Audio")]
         [SerializeField] private UISoundsConfig uiSounds;
+        [SerializeField] private AudioSource    audioSource;
 
         [Header("Controls")]
         [SerializeField] private KeyboardControls controls;
@@ -33,7 +34,7 @@ namespace Blackjack
             // Force this popup to always render on top of world-space cards.
             Canvas overlayCanvas = gameObject.AddComponent<Canvas>();
             overlayCanvas.overrideSorting = true;
-            overlayCanvas.sortingOrder    = 100;
+            overlayCanvas.sortingOrder    = 300;
             gameObject.AddComponent<GraphicRaycaster>();
 
             keepButton.onClick.AddListener(OnKeepClicked);
@@ -68,6 +69,7 @@ namespace Blackjack
             _onKeep           = onKeep;
             _onReconsider     = onReconsider;
             gameObject.SetActive(true);
+            uiSounds?.popupSound.Play(audioSource);
         }
 
         private void Update()

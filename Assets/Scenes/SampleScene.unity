@@ -3828,6 +3828,7 @@ MonoBehaviour:
   keepButton: {fileID: 653691185}
   reconsiderButton: {fileID: 924326561}
   uiSounds: {fileID: 11400000, guid: 60decf6ddf43b154c8d0e5781e7d3165, type: 2}
+  audioSource: {fileID: 0}
   controls: {fileID: 11400000, guid: 5599a331733b13a4e8a7f08b7c64714c, type: 2}
 --- !u!114 &446042941
 MonoBehaviour:
@@ -4074,7 +4075,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'CodeRed Soft: 2026-05-30'
+  m_text: 'CodeRed Soft: 2026-06-04'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -11426,7 +11427,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 325, y: -30}
+  m_AnchoredPosition: {x: 421, y: -30}
   m_SizeDelta: {x: 115, y: 90}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1758351381

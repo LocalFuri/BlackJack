@@ -1,4 +1,5 @@
 using Blackjack.UI;
+using System.IO;
 using UnityEngine;
 using UnityEngine.Audio;
 using UnityEngine.InputSystem;
@@ -9,11 +10,14 @@ namespace Blackjack
     /// <summary>
     /// Toggles the developer menu panel with F2.
     /// Controls visibility of the three test buttons and the master volume.
-    /// Menu settings are session-only; nothing is read from or written to disk.
+    /// Settings are persisted to <c>settings.json</c> in <c>Application.persistentDataPath</c>.
+    /// Inspector defaults are used as the initial values; the JSON file overrides them on load.
     /// </summary>
     [RequireComponent(typeof(AudioSource))]
     public class MenuController : MonoBehaviour
     {
+        private static string SaveFilePath =>
+            Path.Combine(Application.persistentDataPath, "settings.json");
         [Header("Menu Panel")]
         [SerializeField] private GameObject menuPanel;
 
@@ -97,6 +101,7 @@ namespace Blackjack
                 showStrategyEnabled = blackjackGame != null && blackjackGame.ShowStrategyTable
             };
 
+            LoadSettingsFromFile();
             ApplySettings();
 
             // Register callbacks after applying so initial apply does not trigger saves.
@@ -355,6 +360,11 @@ namespace Blackjack
         {
             if (blackjackGame != null)
                 blackjackGame.OnAlwaysLoseDisabled -= DisableAlwaysLose;
+        }
+
+        private void OnApplicationQuit()
+        {
+            PersistSettingsToFile();
         }
 
         // ──────────────────────────────────────────────────────────────────────────
@@ -699,9 +709,37 @@ namespace Blackjack
             if (playSound) blackjackGame?.PlayCloseSound();
         }
 
-        /// <summary>Session-only; settings are never written to disk.</summary>
+        /// <summary>Writes the current settings to <see cref="SaveFilePath"/> as JSON.</summary>
         private void PersistSettingsToFile()
         {
+            try
+            {
+                string json = JsonUtility.ToJson(_settings, prettyPrint: true);
+                File.WriteAllText(SaveFilePath, json);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[MenuController] Failed to save settings: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Reads <see cref="SaveFilePath"/> and overlays its values onto <see cref="_settings"/>.
+        /// Inspector defaults remain for any field absent from the file.
+        /// </summary>
+        private void LoadSettingsFromFile()
+        {
+            if (!File.Exists(SaveFilePath)) return;
+
+            try
+            {
+                string json = File.ReadAllText(SaveFilePath);
+                JsonUtility.FromJsonOverwrite(json, _settings);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[MenuController] Failed to load settings: {e.Message}");
+            }
         }
 
         /// <summary>Shows or hides the menu via CanvasGroup, keeping the GameObject always active so listeners survive.</summary>

@@ -448,7 +448,7 @@ namespace Blackjack
             ResetPlayerScoreLabelPosition();
             SetScoreLabelsVisible(false);
             if (martingaleBetLimitExceeded)
-                NotifyBetLimitExceeded();
+                SetStatus("Press Deal to start");
             else
                 SetStatus("Place your bet");
 
@@ -518,18 +518,18 @@ namespace Blackjack
         {
             if (_betLimitStatusLocked || IsLimitPulsing) return;
 
-            IsLimitPulsing = true;
-
             bool alreadyAtMax = chipBetting != null && chipBetting.TotalBet == chipBetting.MaxBet;
 
-            if (!alreadyAtMax && chipBetting != null)
-                chipBetting.SetBet(chipBetting.MaxBet);
-
             if (alreadyAtMax)
+            {
                 knockSound.Play(audioSource);
-            else
-                resetSound.Play(audioSource);
+                SetStatus("Press Deal to start");
+                return;
+            }
 
+            IsLimitPulsing = true;
+            chipBetting?.SetBet(chipBetting.MaxBet);
+            resetSound.Play(audioSource);
             _limitPulseCoroutine = StartCoroutine(PulseLimitExceeded());
         }
 
@@ -574,7 +574,7 @@ namespace Blackjack
                 yield return new WaitForSeconds(LimitPulseDelay);
             }
 
-            SetStatus(BetLimitStatusMessage, LoseColor);
+            SetStatus("Press Deal to start");
             IsLimitPulsing        = false;
             _betLimitStatusLocked = true;
             _limitPulseCoroutine  = null;
@@ -938,8 +938,9 @@ namespace Blackjack
                 }
                 else
                 {
-                    ApplyBlackjackGlow();
-                    SpawnFireworks(PlayNaturalBlackjackSound());
+                    // Capture before RecordRoundOutcome clears _inMartingaleMode.
+                    bool isMartingaleNaturalBJ = _inMartingaleMode;
+                    StartCoroutine(PlayWinAndChipRoutine(useCelebration: true, playResetSound: isMartingaleNaturalBJ));
                     RecordRoundOutcome(false, scoreDelta: +1);
                     _playerWon = true;
                     SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);
@@ -1726,7 +1727,7 @@ namespace Blackjack
                     }
                 }
 
-                if (anyWin)       { StartCoroutine(PlayWinAndChipRoutine()); _playerWon = true; }
+                if (anyWin)       { StartCoroutine(PlayWinAndChipRoutine(useCelebration: _inMartingaleMode && anyWin && !anyLoss, playResetSound: _inMartingaleMode && anyWin && !anyLoss)); _playerWon = true; }
                 else if (anyLoss) PlayLoseSound();
                 else              PlayTieSound();
 
@@ -1752,9 +1753,11 @@ namespace Blackjack
                 // For wins, pay out based on what is visible in the bet area only (CurrentBet).
                 // On a double-down CurrentBet already equals twice the original stake.
                 int winBet = CurrentBet;
-                if      (IsNaturalBlackjack(_playerHand)) { StartCoroutine(PlayWinAndChipRoutine());  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.BlackjackWin, winBet); }
-                else if (dealerBust)                    { StartCoroutine(PlayWinAndChipRoutine());  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
-                else if (p > dealerScore)               { StartCoroutine(PlayWinAndChipRoutine());  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
+                // Capture before RecordRoundOutcome clears _inMartingaleMode.
+                bool isMartingaleWin = _inMartingaleMode;
+                if      (IsNaturalBlackjack(_playerHand)) { StartCoroutine(PlayWinAndChipRoutine(useCelebration: true, playResetSound: isMartingaleWin));             RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.BlackjackWin, winBet); }
+                else if (dealerBust)                    { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin));  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
+                else if (p > dealerScore)               { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin));  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
                 else if (dealerScore > p)               { PlayLoseSound(); RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1);  SetStatus($"You lose",LoseColor); ApplyPayout(PayoutResult.Lose, totalBet); }
                 else
                 {
@@ -2426,18 +2429,23 @@ namespace Blackjack
         }
 
         /// <summary>
-        /// Plays the win sound (or Martingale celebration), waits for the win clip to finish,
-        /// then plays <see cref="chipSound"/>. Used for double down and split wins.
+        /// Plays the win sound (or Martingale/natural-BJ celebration), waits for the clip to finish,
+        /// then plays <see cref="chipSound"/> and signals <see cref="EndRound"/> to update the bet
+        /// area simultaneously via <see cref="_winSoundEndTime"/>.
+        /// Pass <paramref name="useCelebration"/> for Martingale wins and natural blackjacks.
+        /// Pass <paramref name="playResetSound"/> only for Martingale wins.
         /// </summary>
-        private IEnumerator PlayWinAndChipRoutine()
+        private IEnumerator PlayWinAndChipRoutine(bool useCelebration = false, bool playResetSound = false)
         {
-            if (_inMartingaleMode)
+            if (useCelebration)
             {
                 ApplyBlackjackGlow();
                 float celebrationDuration = PlayNaturalBlackjackSound();
                 SpawnFireworks(celebrationDuration);
-                StartCoroutine(PlayResetSoundAfterDelay(celebrationDuration));
-                _winSoundEndTime = Time.time + celebrationDuration + chipSound.Length;
+                if (playResetSound)
+                    StartCoroutine(PlayResetSoundAfterDelay(celebrationDuration));
+                // Bet area restore fires when the celebration ends — same moment as the chip sound.
+                _winSoundEndTime = Time.time + celebrationDuration;
                 if (celebrationDuration > 0f)
                     yield return new WaitForSeconds(celebrationDuration);
                 else

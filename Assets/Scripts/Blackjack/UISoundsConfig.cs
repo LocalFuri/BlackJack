@@ -17,5 +17,8 @@ namespace Blackjack
 
         [Tooltip("Played when any option checkbox is toggled on.")]
         public SoundEntry toggleSound;
+
+        [Tooltip("Played when a popup appears (e.g. strategy deviation warning).")]
+        public SoundEntry popupSound;
     }
 }
