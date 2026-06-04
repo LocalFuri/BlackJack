@@ -63,6 +63,7 @@ namespace Blackjack
 
         private OptionsSettings _settings;
         private CanvasGroup     _menuCanvasGroup;
+        private RectTransform   _menuRectTransform;
         private bool            _menuVisible;
 
         /// <summary>Guard flag to prevent re-entrant callback processing when programmatically setting toggle values.</summary>
@@ -82,7 +83,10 @@ namespace Blackjack
 
             // Cache the CanvasGroup used to show/hide the panel without SetActive.
             if (menuPanel != null)
-                _menuCanvasGroup = menuPanel.GetComponent<CanvasGroup>();
+            {
+                _menuCanvasGroup   = menuPanel.GetComponent<CanvasGroup>();
+                _menuRectTransform = menuPanel.GetComponent<RectTransform>();
+            }
 
             BindRowToggleReferences();
             EnsureToggleRowPlacement();
@@ -138,7 +142,10 @@ namespace Blackjack
                 ToggleStrategyTable();
 
             if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
+            {
                 HandleStrategyTableRightClick();
+                HandleMenuPanelRightClick();
+            }
 
             SyncMartingaleThresholdIfSliderChanged();
         }
@@ -287,6 +294,39 @@ namespace Blackjack
                 HideStrategyTable();
             else
                 ShowStrategyTable();
+        }
+
+        /// <summary>Right-click inside the menu panel area opens the menu when hidden, or closes it when visible.</summary>
+        private void HandleMenuPanelRightClick()
+        {
+            if (Mouse.current == null) return;
+
+            if (_menuVisible)
+            {
+                CloseMenuInternal(playSound: true);
+                return;
+            }
+
+            if (_menuRectTransform == null) return;
+
+            // Honour the same guard as keyboard open: only allow when betting is idle or round is over.
+            if (blackjackGame != null && !blackjackGame.IsBettingAllowed && !blackjackGame.IsRoundOver)
+                return;
+
+            Canvas canvas = _menuRectTransform.GetComponentInParent<Canvas>();
+            Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
+                ? canvas.worldCamera
+                : null;
+
+            if (!RectTransformUtility.RectangleContainsScreenPoint(
+                    _menuRectTransform,
+                    Mouse.current.position.ReadValue(),
+                    uiCamera))
+                return;
+
+            SetMenuVisible(true);
+            SyncMartingaleThresholdFromSlider();
+            uiSounds?.toggleSound.Play(audioSource);
         }
 
         private void ShowStrategyTable()

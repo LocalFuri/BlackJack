@@ -2840,7 +2840,7 @@ MonoBehaviour:
   audioSource: {fileID: 383359001}
   cardSlideSound:
     clip: {fileID: 8300000, guid: da7b20ec10624f545b41aab5cb60a5e9, type: 3}
-    volume: 0.51
+    volume: 0.16
   cheaterSound:
     clip: {fileID: 8300000, guid: 047b0bb8aea71b244bd6b11b0ad75d99, type: 3}
     volume: 0.19
@@ -2852,7 +2852,7 @@ MonoBehaviour:
     volume: 0.38
   dealCardSound:
     clip: {fileID: 8300000, guid: f6a41ed8c1389984fbc5f1c6ec4ef036, type: 3}
-    volume: 1
+    volume: 0.55
   ddSound:
     clip: {fileID: 8300000, guid: 35d10448a85321f4d91777a1cdc67597, type: 3}
     volume: 1

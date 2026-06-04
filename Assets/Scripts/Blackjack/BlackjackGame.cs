@@ -111,6 +111,8 @@ namespace Blackjack
     private bool _doubleBJSoundPlaying;
     private bool _dealerNaturalBJPlaying;
     private float _fireworksEndTime;
+        private float _winSoundEndTime;
+
     private float _dealerNaturalBJEndTime;
 
         [Header("Timing")]
@@ -283,6 +285,10 @@ namespace Blackjack
             menuController?.ActivateMartingale();
             RefreshStreakLabel();
             OnDeal();
+
+            // Play chip sound after OnDeal so that StopBlackjackCelebration's audioSource.Stop()
+            // — called inside OnDeal — does not cancel it.
+            chipSound.Play(audioSource);
         }
 
         private void ShowMartingalePopup()
@@ -697,7 +703,7 @@ namespace Blackjack
             yield return StartCoroutine(RevealHoleCard());
             UpdateScoreLabels(revealDealer: true);
 
-            surrenderSound.Play(audioSource);
+            chipSound.Play(audioSource); //mark1 
             RecordRoundOutcome(true, lostAmount: CurrentBet * 0.5m);
             SetStatus("Surrender returns 1/2 of bet", SurrenderColor);
             ApplyPayout(PayoutResult.Surrender, CurrentBet);
@@ -1024,6 +1030,9 @@ namespace Blackjack
             _splitCardViews.Add(movedView);
             _splitHand.AddCard(movedCard);
 
+            chipSound.Play(audioSource);
+            if (chipSound.Length > 0f)
+                yield return new WaitForSeconds(chipSound.Length);
             PlayCardSlideSound();
             yield return new WaitForSeconds(0.5f);
 
@@ -1314,7 +1323,11 @@ namespace Blackjack
                 PayoutResult.Surrender    => bet * 0.5m,
                 _                         => 0,                   // Lose — bet already gone
             };
-            RefreshMoneyLabel();
+
+            // For wins the money label is refreshed after the win sound finishes (in PlayWinAndChipRoutine).
+            bool isWin = result == PayoutResult.Win || result == PayoutResult.BlackjackWin;
+            if (!isWin)
+                RefreshMoneyLabel();
         }
 
         private void RefreshMoneyLabel()
@@ -1333,8 +1346,9 @@ namespace Blackjack
         /// <paramref name="scoreDelta"/> is +1 for a win, -1 for a loss, 0 for push or surrender.
         /// <paramref name="isPush"/> when true, leaves the loss streak and all Martingale state completely unchanged — a push is neutral.
         /// <paramref name="isMartingaleNeutral"/> when true, leaves all Martingale and streak state completely unchanged (used for split rounds with no net score change).
+        /// <paramref name="lossCount"/> number of losses to count toward the streak — 2 when both split hands are lost.
         /// </summary>
-        private void RecordRoundOutcome(bool isLoss, decimal lostAmount = 0, int scoreDelta = 0, bool isPush = false, bool isMartingaleNeutral = false)
+        private void RecordRoundOutcome(bool isLoss, decimal lostAmount = 0, int scoreDelta = 0, bool isPush = false, bool isMartingaleNeutral = false, int lossCount = 1)
         {
             Debug.Log($"[Martingale] RecordRoundOutcome called: isLoss={isLoss} isPush={isPush} isMartingaleNeutral={isMartingaleNeutral} AlwaysLose={AlwaysLose}");
 
@@ -1359,9 +1373,9 @@ namespace Blackjack
 
             if (isLoss)
             {
-                _consecutiveLosses++;
-                _totalLosses++;
-                _totalAmountLost += lostAmount;
+                _consecutiveLosses += lossCount;
+                _totalLosses       += lossCount;
+                _totalAmountLost   += lostAmount;
 
                 bool thresholdReached = EffectiveMartingaleThreshold > 0 && _consecutiveLosses >= EffectiveMartingaleThreshold;
 
@@ -1712,7 +1726,7 @@ namespace Blackjack
                     }
                 }
 
-                if (anyWin)       { PlayWinRoutine(); _playerWon = true; }
+                if (anyWin)       { StartCoroutine(PlayWinAndChipRoutine()); _playerWon = true; }
                 else if (anyLoss) PlayLoseSound();
                 else              PlayTieSound();
 
@@ -1721,10 +1735,13 @@ namespace Blackjack
                 int  splitScoreDelta = anyWin && !anyLoss ? +1 : anyLoss && !anyWin ? -1 : 0;
                 // If the split produced no net score change, leave the Martingale counter completely untouched.
                 bool splitNeutral = splitScoreDelta == 0;
+                // Both hands lost — count as 2 losses toward the streak.
+                bool bothHandsLost = anyLoss && !anyWin && !anyPush;
                 RecordRoundOutcome(isLoss: anyLoss && !anyWin, lostAmount: splitLostAmount,
                     scoreDelta: splitScoreDelta,
                     isPush: !anyWin && !anyLoss || splitPush,
-                    isMartingaleNeutral: splitNeutral);
+                    isMartingaleNeutral: splitNeutral,
+                    lossCount: bothHandsLost ? 2 : 1);
                 SetStatus(string.Join("  |  ", results));
             }
             else
@@ -1735,9 +1752,9 @@ namespace Blackjack
                 // For wins, pay out based on what is visible in the bet area only (CurrentBet).
                 // On a double-down CurrentBet already equals twice the original stake.
                 int winBet = CurrentBet;
-                if      (IsNaturalBlackjack(_playerHand)) { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.BlackjackWin, winBet); }
-                else if (dealerBust)                    { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
-                else if (p > dealerScore)               { PlayWinRoutine();  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
+                if      (IsNaturalBlackjack(_playerHand)) { StartCoroutine(PlayWinAndChipRoutine());  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.BlackjackWin, winBet); }
+                else if (dealerBust)                    { StartCoroutine(PlayWinAndChipRoutine());  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
+                else if (p > dealerScore)               { StartCoroutine(PlayWinAndChipRoutine());  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
                 else if (dealerScore > p)               { PlayLoseSound(); RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1);  SetStatus($"You lose",LoseColor); ApplyPayout(PayoutResult.Lose, totalBet); }
                 else
                 {
@@ -1796,7 +1813,12 @@ namespace Blackjack
             chipBetting?.ClampBetToMaxBet();
 
             if (!restoredPreMartingaleBet)
+            {
+                float soundRemaining = _winSoundEndTime - Time.time;
+                if (soundRemaining > 0f)
+                    yield return new WaitForSeconds(soundRemaining);
                 chipBetting?.RestoreBetFromSnapshot();
+            }
 
             // If fireworks or dealer natural-blackjack presentation is still playing, wait before
             // letting the player interact again.
@@ -2334,14 +2356,16 @@ namespace Blackjack
             RectTransform labelRT = label.GetComponent<RectTransform>();
             RectTransform areaRT  = cardArea.GetComponent<RectTransform>();
 
+            // areaCenterY is the Y of the card area's centre in parent space.
+            // The label pivot is (0.5, 0.5), so anchoredPosition.y represents the label's
+            // own centre — assign areaCenterY directly to align them.
             float areaCenterY = areaRT.anchoredPosition.y + areaRT.sizeDelta.y * 0.5f;
-            float labelHalfHeight = labelRT.sizeDelta.y * 0.5f;
 
             labelRT.anchorMin = areaRT.anchorMin;
             labelRT.anchorMax = areaRT.anchorMax;
             labelRT.anchoredPosition = new Vector2(
                 _defaultPlayerScorePosition.x,
-                areaCenterY - labelHalfHeight
+                areaCenterY
             );
         }
 
@@ -2401,7 +2425,36 @@ namespace Blackjack
             }
         }
 
-        /// <summary>Waits for <paramref name="delay"/> seconds, then plays <see cref="resetSound"/>.</summary>
+        /// <summary>
+        /// Plays the win sound (or Martingale celebration), waits for the win clip to finish,
+        /// then plays <see cref="chipSound"/>. Used for double down and split wins.
+        /// </summary>
+        private IEnumerator PlayWinAndChipRoutine()
+        {
+            if (_inMartingaleMode)
+            {
+                ApplyBlackjackGlow();
+                float celebrationDuration = PlayNaturalBlackjackSound();
+                SpawnFireworks(celebrationDuration);
+                StartCoroutine(PlayResetSoundAfterDelay(celebrationDuration));
+                _winSoundEndTime = Time.time + celebrationDuration + chipSound.Length;
+                if (celebrationDuration > 0f)
+                    yield return new WaitForSeconds(celebrationDuration);
+                else
+                    yield return null;
+            }
+            else
+            {
+                _winSoundEndTime = Time.time + winSound.Length + chipSound.Length;
+                PlayWinSound();
+                if (winSound.Length > 0f)
+                    yield return new WaitForSeconds(winSound.Length);
+                else
+                    yield return null;
+            }
+            RefreshMoneyLabel();
+            chipSound.Play(audioSource);
+        }
         private IEnumerator PlayResetSoundAfterDelay(float delay)
         {
             // Always yield at least one frame so RecordRoundOutcome can set _martingaleWin before we read it.

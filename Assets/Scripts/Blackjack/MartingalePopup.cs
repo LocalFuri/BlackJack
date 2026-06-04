@@ -26,6 +26,12 @@ namespace Blackjack
 
         private void Awake()
         {
+            // Force this popup to always render on top of world-space cards.
+            Canvas overlayCanvas = gameObject.AddComponent<Canvas>();
+            overlayCanvas.overrideSorting = true;
+            overlayCanvas.sortingOrder    = 100;
+            gameObject.AddComponent<GraphicRaycaster>();
+
             doItButton.onClick.AddListener(OnDoItClicked);
             reconsiderButton.onClick.AddListener(OnReconsiderClicked);
             gameObject.SetActive(false);
@@ -71,8 +77,6 @@ namespace Blackjack
         {
             _onDoIt       = null;
             _onReconsider = null;
-            if (uiSounds != null && uiSounds.closeSound.HasClip)
-                AudioSource.PlayClipAtPoint(uiSounds.closeSound.clip, Vector3.zero, uiSounds.closeSound.volume);
             gameObject.SetActive(false);
         }
     }
