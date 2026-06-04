@@ -9,8 +9,6 @@ namespace Blackjack
     public class WorldCardRowLayout : MonoBehaviour
     {
         [SerializeField] private float cardSpacing = 1.25f;
-        [SerializeField] private float doubleDownVerticalOffset = 0.35f;
-        [SerializeField] private float doubleDownHorizontalOffset = 0.55f;
 
         private float _cardWorldWidth = 1.2f;
 
@@ -33,8 +31,6 @@ namespace Blackjack
                 uiSpacingPx = layoutGroup.spacing;
 
             cardSpacing = _cardWorldWidth + uiSpacingPx / ppu * scale;
-            doubleDownVerticalOffset = _cardWorldWidth * 0.29f;
-            doubleDownHorizontalOffset = _cardWorldWidth * 0.46f;
         }
 
         public void RefreshLayout()
@@ -51,20 +47,6 @@ namespace Blackjack
                 child.localRotation = Quaternion.identity;
                 index++;
             }
-        }
-
-        public void ApplyDoubleDownLayout(Transform first, Transform second, Transform third)
-        {
-            if (first == null || second == null || third == null)
-                return;
-
-            float spacing = CardWorldWidth * 0.5f + 0.05f;
-
-            Vector3 basePos = second.localPosition;
-            first.localPosition = new Vector3(0f, 0f, 0f);
-            second.localPosition = new Vector3(spacing * 2f, 0f, 0f);
-            third.localPosition = basePos + new Vector3(doubleDownHorizontalOffset, doubleDownVerticalOffset, 0f);
-            third.SetAsLastSibling();
         }
     }
 }

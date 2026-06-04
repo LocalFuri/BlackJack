@@ -213,16 +213,8 @@ namespace Blackjack
 
         private const float StatusLabelHeight = 50f;
 
-        private HorizontalLayoutGroup _frozenLayoutGroup;
-        private RectTransform           _doubleDownFirst;
-        private RectTransform           _doubleDownSecond;
-        private RectTransform           _doubleDownThird;
-        private Coroutine               _doubleDownLayoutCoroutine;
-
-        private const float DefaultCardWidth       = 120f;
-        private const float DefaultCardHeight      = 168f;
-        // Small upward shift from the pair center (see PlaceDoubleDownCard).
-        private const float DoubleDownVerticalLift = 50f;
+        private const float DefaultCardWidth  = 120f;
+        private const float DefaultCardHeight = 168f;
 
     private Hand           ActiveHand  => _activeHandIndex == 0 ? _playerHand  : _splitHand;
         private List<ICardDisplay> ActiveViews => _activeHandIndex == 0 ? _playerCardViews : _splitCardViews;
@@ -620,7 +612,6 @@ namespace Blackjack
             if (_doubleBJSoundPlaying) return;
             StopAllCoroutines();
             StopDoubleDownLayout();
-            UnfreezeAreaLayout();
             IsLimitPulsing = false;
             _dealerNaturalBJPlaying = false;
             _dealerNaturalBJEndTime = 0f;
@@ -1092,8 +1083,7 @@ namespace Blackjack
             yield return StartCoroutine(
                 DealCardTo(ActiveHand, ActiveViews,
                            _activeHandIndex == 0 ? playerCardArea : splitCardArea,
-                           faceUp: true,
-                           doubleDownPlacement: true));
+                           faceUp: true));
 
             SetStatus("Double Down!");
 
@@ -1846,7 +1836,7 @@ namespace Blackjack
         // ──────────────────────────────────────────────────────────────────────────
 
         private IEnumerator DealCardTo(
-            Hand hand, List<ICardDisplay> views, Transform area, bool faceUp, bool doubleDownPlacement = false)
+            Hand hand, List<ICardDisplay> views, Transform area, bool faceUp)
         {
             yield return new WaitForSeconds(dealDelay);
 
@@ -1855,22 +1845,12 @@ namespace Blackjack
             if (dealCardSound.HasClip && audioSource != null)
                 dealCardSound.Play(audioSource);
 
-            if (doubleDownPlacement && !useWorldSpaceCards)
-            {
-                FreezeAreaLayout(area);
-                for (int i = 0; i < views.Count; i++)
-                    EnsureIgnoreLayout(GetRectTransform(views[i]));
-            }
-
-            ICardDisplay view = SpawnCardView(card, area, faceUp: false, ignoreLayout: doubleDownPlacement);
+            ICardDisplay view = SpawnCardView(card, area, faceUp: false);
             if (view == null)
                 yield break;
 
             hand.AddCard(card);
             views.Add(view);
-
-            if (doubleDownPlacement && views.Count >= 3 && !useWorldSpaceCards)
-                ApplyDoubleDownLayout(views[0], views[1], view);
 
             if (faceUp)
             {
@@ -1878,177 +1858,12 @@ namespace Blackjack
                 view.Flip(toFaceUp: true, () => flipDone = true);
                 yield return new WaitUntil(() => flipDone);
             }
-
-            if (doubleDownPlacement && views.Count >= 3)
-            {
-                yield return null;
-                if (useWorldSpaceCards)
-                {
-                    ApplyWorldDoubleDownLayout(area, views[0], views[1], view);
-                }
-                else
-                {
-                    Canvas.ForceUpdateCanvases();
-                    yield return new WaitForEndOfFrame();
-                    ApplyDoubleDownLayout(views[0], views[1], view);
-                }
-            }
-        }
-
-        private void FreezeAreaLayout(Transform area)
-        {
-            UnfreezeAreaLayout();
-            if (area == null) return;
-
-            _frozenLayoutGroup = area.GetComponent<HorizontalLayoutGroup>();
-            if (_frozenLayoutGroup != null)
-                _frozenLayoutGroup.enabled = false;
-        }
-
-        private void UnfreezeAreaLayout()
-        {
-            if (_frozenLayoutGroup != null)
-            {
-                _frozenLayoutGroup.enabled = true;
-                _frozenLayoutGroup = null;
-            }
-        }
-
-        private void ApplyWorldDoubleDownLayout(
-            Transform area, ICardDisplay firstCard, ICardDisplay secondCard, ICardDisplay doubleDownCard)
-        {
-            Transform spawnParent = ResolveCardSpawnParent(area);
-            WorldCardRowLayout layout = spawnParent != null
-                ? spawnParent.GetComponent<WorldCardRowLayout>()
-                : null;
-
-            if (layout == null)
-                return;
-
-            layout.ApplyDoubleDownLayout(
-                GetTransform(firstCard),
-                GetTransform(secondCard),
-                GetTransform(doubleDownCard));
-        }
-
-        private void ApplyDoubleDownLayout(
-            ICardDisplay firstCard, ICardDisplay secondCard, ICardDisplay doubleDownCard)
-        {
-            if (firstCard == null || secondCard == null || doubleDownCard == null)
-                return;
-
-            RectTransform firstRt  = GetRectTransform(firstCard);
-            RectTransform secondRt = GetRectTransform(secondCard);
-            RectTransform thirdRt  = GetRectTransform(doubleDownCard);
-
-            EnsureIgnoreLayout(thirdRt);
-            PlaceDoubleDownCard(firstRt, secondRt, thirdRt);
-
-            _doubleDownFirst  = firstRt;
-            _doubleDownSecond = secondRt;
-            _doubleDownThird  = thirdRt;
-            StartDoubleDownLayoutMaintenance();
-        }
-
-        private static void PlaceDoubleDownCard(
-            RectTransform firstRt, RectTransform secondRt, RectTransform thirdRt)
-        {
-            if (firstRt == null || secondRt == null || thirdRt == null)
-                return;
-
-            RectTransform areaRt = firstRt.parent as RectTransform;
-            if (areaRt == null || secondRt.parent != areaRt)
-                return;
-
-            if (thirdRt.parent != areaRt)
-                thirdRt.SetParent(areaRt, false);
-
-            SyncDoubleDownCardSize(thirdRt);
-            EnsureDoubleDownCardVisible(thirdRt);
-
-            thirdRt.anchorMin = new Vector2(0.5f, 0.5f);
-            thirdRt.anchorMax = new Vector2(0.5f, 0.5f);
-            thirdRt.pivot     = new Vector2(0.5f, 0.5f);
-
-            Vector3 firstCenter  = firstRt.TransformPoint(firstRt.rect.center);
-            Vector3 secondCenter = secondRt.TransformPoint(secondRt.rect.center);
-            Vector3 pairCenter   = (firstCenter + secondCenter) * 0.5f;
-
-            Vector3 worldCenter = pairCenter + areaRt.TransformVector(
-                new Vector3(0f, DoubleDownVerticalLift, 0f));
-
-            thirdRt.localRotation = Quaternion.Euler(0f, 0f, -90f);
-            thirdRt.position      = worldCenter;
-            thirdRt.SetAsLastSibling();
-        }
-
-        private void StartDoubleDownLayoutMaintenance()
-        {
-            if (_doubleDownLayoutCoroutine != null)
-                StopCoroutine(_doubleDownLayoutCoroutine);
-
-            _doubleDownLayoutCoroutine = StartCoroutine(MaintainDoubleDownLayout());
-        }
-
-        private IEnumerator MaintainDoubleDownLayout()
-        {
-            while (_doubleDownFirst != null && _doubleDownSecond != null && _doubleDownThird != null)
-            {
-                PlaceDoubleDownCard(_doubleDownFirst, _doubleDownSecond, _doubleDownThird);
-                yield return null;
-            }
-
-            _doubleDownLayoutCoroutine = null;
-        }
-
-        private static void EnsureDoubleDownCardVisible(RectTransform thirdRt)
-        {
-            thirdRt.gameObject.SetActive(true);
-
-            if (thirdRt.TryGetComponent(out CanvasRenderer renderer))
-                renderer.cullTransparentMesh = false;
-        }
-
-        private static void EnsureIgnoreLayout(RectTransform rt)
-        {
-            if (!rt.TryGetComponent(out LayoutElement layoutElement))
-                layoutElement = rt.gameObject.AddComponent<LayoutElement>();
-            layoutElement.ignoreLayout = true;
-        }
-
-        private static void SyncDoubleDownCardSize(RectTransform rt)
-        {
-            SyncCardLayoutElement(rt, DefaultCardWidth, DefaultCardHeight);
-            rt.sizeDelta = new Vector2(DefaultCardWidth, DefaultCardHeight);
-            rt.localScale = Vector3.one;
-        }
-
-        private static void SyncCardLayoutElement(RectTransform rt, float width, float height)
-        {
-            if (!rt.TryGetComponent(out LayoutElement layoutElement))
-                layoutElement = rt.gameObject.AddComponent<LayoutElement>();
-
-            layoutElement.ignoreLayout     = true;
-            layoutElement.preferredWidth   = width;
-            layoutElement.preferredHeight  = height;
-            layoutElement.minWidth         = width;
-            layoutElement.minHeight        = height;
         }
 
         private void StopDoubleDownLayout()
         {
-            if (_doubleDownLayoutCoroutine != null)
-            {
-                StopCoroutine(_doubleDownLayoutCoroutine);
-                _doubleDownLayoutCoroutine = null;
-            }
-
             DestroyLegacyDoubleDownAnchors(playerCardArea);
             DestroyLegacyDoubleDownAnchors(splitCardArea);
-
-            _doubleDownFirst  = null;
-            _doubleDownSecond = null;
-            _doubleDownThird  = null;
         }
 
         private static void DestroyLegacyDoubleDownAnchors(Transform area)
@@ -2078,7 +1893,7 @@ namespace Blackjack
             views.Clear();
         }
 
-        private ICardDisplay SpawnCardView(CardData card, Transform area, bool faceUp, bool ignoreLayout = false)
+        private ICardDisplay SpawnCardView(CardData card, Transform area, bool faceUp)
         {
             GameObject prefab = ResolveCardPrefab();
             Transform parent = ResolveCardSpawnParent(area);
@@ -2091,18 +1906,9 @@ namespace Blackjack
 
             GameObject go = Instantiate(prefab, parent, false);
             go.SetActive(true);
-            go.name = ignoreLayout ? "DoubleDownCard" : "CardView";
+            go.name = "CardView";
 
-            if (!useWorldSpaceCards)
-            {
-                RectTransform rt = go.GetComponent<RectTransform>();
-                if (ignoreLayout && rt != null)
-                {
-                    EnsureIgnoreLayout(rt);
-                    SyncDoubleDownCardSize(rt);
-                }
-            }
-            else
+            if (useWorldSpaceCards)
             {
                 WorldCardRowLayout layout = parent.GetComponent<WorldCardRowLayout>();
                 if (layout != null)
@@ -2787,7 +2593,6 @@ namespace Blackjack
         private void ClearTable()
         {
             StopDoubleDownLayout();
-            UnfreezeAreaLayout();
 
             _playerHand.Clear();
             _splitHand.Clear();
