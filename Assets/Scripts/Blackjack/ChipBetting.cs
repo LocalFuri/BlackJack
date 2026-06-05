@@ -733,14 +733,14 @@ namespace Blackjack
             //betSumLabel.text = $"Bet: € {((decimal)TotalBet).ToString("N2", GermanCulture)}";
             //betSumLabel.text = $"Bet: € {TotalBet}"; //no separators
             betSumLabel.text = $"€ {(TotalBet).ToString("N0", GermanCulture)}"; //N2 = decimal digits
-            PositionBetLabelLeftOfLowestChip();
+            PositionBetLabelRightOfChips();
         }
 
         /// <summary>
-        /// Positions the bet sum label to the left of the leftmost chip column,
+        /// Positions the bet sum label to the right of the rightmost chip column,
         /// vertically aligned with the lowest (first) chip in that column.
         /// </summary>
-        private void PositionBetLabelLeftOfLowestChip()
+        private void PositionBetLabelRightOfChips()
         {
             if (betSumLabel == null) return;
 
@@ -753,8 +753,8 @@ namespace Blackjack
                 return;
             }
 
-            // Find the leftmost column's bottom chip
-            float leftmostX = float.MaxValue;
+            // Find the rightmost chip's right edge across all columns
+            float rightmostEdge = float.MinValue;
             float lowestChipY = 0f;
 
             foreach (int typeIndex in _columnOrder)
@@ -762,23 +762,23 @@ namespace Blackjack
                 if (!_stacks.TryGetValue(typeIndex, out List<GameObject> stack) || stack.Count == 0) continue;
 
                 RectTransform bottomChipRT = stack[0].GetComponent<RectTransform>();
-                float chipLeftEdge = bottomChipRT.anchoredPosition.x;
+                // Chip pivot is at left-center; visual right edge accounts for localScale
+                float chipRightEdge = bottomChipRT.anchoredPosition.x + chipSize.x * betChipScale;
 
-                if (chipLeftEdge < leftmostX)
+                if (chipRightEdge > rightmostEdge)
                 {
-                    leftmostX   = chipLeftEdge;
-                    lowestChipY = bottomChipRT.anchoredPosition.y;
+                    rightmostEdge = chipRightEdge;
+                    lowestChipY   = bottomChipRT.anchoredPosition.y;
                 }
             }
 
             const float LabelGap = 8f;
-            float labelWidth  = labelRT.sizeDelta.x;
 
-            // Right-align the label just before the leftmost chip, centred on the lowest chip's Y
+            // Left-align the label just after the rightmost chip, centred on the lowest chip's Y
             labelRT.anchorMin = new Vector2(0f, 0.5f);
             labelRT.anchorMax = new Vector2(0f, 0.5f);
-            labelRT.pivot     = new Vector2(1f, 0.5f);  // pivot at right edge so it grows leftward
-            labelRT.anchoredPosition = new Vector2(leftmostX - LabelGap, lowestChipY);
+            labelRT.pivot     = new Vector2(0f, 0.5f);  // pivot at left edge so it grows rightward
+            labelRT.anchoredPosition = new Vector2(rightmostEdge + LabelGap, lowestChipY);
         }
 
     }

@@ -414,6 +414,12 @@ namespace Blackjack
 
         private void OnApplicationQuit()
         {
+            // Reset active gameplay modes so the next session starts in a clean neutral state.
+            _settings.martingaleActive        = false;
+            _settings.martingaleAutoPlay      = false;
+            _settings.alwaysLoseEnabled       = false;
+            _settings.overrideStrategyEnabled = false;
+
             PersistSettingsToFile();
         }
 

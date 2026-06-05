@@ -87,20 +87,38 @@ namespace Blackjack
 
 
     [Header("Audio")] //mark audio
-        [SerializeField] private AudioSource audioSource;
-
+    [SerializeField] private AudioSource audioSource;
+    [SerializeField] private SoundEntry ahdamnitSound;
+    [SerializeField] private SoundEntry areyouseriousSound;
+    [SerializeField] private SoundEntry bullshitSound;
     [SerializeField] private SoundEntry cardSlideSound;
+    [SerializeField] private SoundEntry cantbelievethatSndSound;
+    [SerializeField] private SoundEntry carefullSound;
     [SerializeField] private SoundEntry cheaterSound;
     [SerializeField] private SoundEntry chipSound;
+    [SerializeField] private SoundEntry comeonSound;
     [SerializeField] private SoundEntry damnitSound;
     [SerializeField] private SoundEntry dealCardSound;
     [SerializeField] private SoundEntry ddSound;
+    [SerializeField] private SoundEntry doitagainSound;
+    [SerializeField] private SoundEntry donttouchmeSound;
     [SerializeField] private SoundEntry exitSound;
+    [SerializeField] private SoundEntry fuckSound;
+    [SerializeField] private SoundEntry helltopaySound;
     [SerializeField] private SoundEntry hmhSound;
+    [SerializeField] private SoundEntry isthatyourbasicstrategySound;
+    [SerializeField] private SoundEntry jesusSound;
     [SerializeField] private SoundEntry knockSound;
     [SerializeField] private SoundEntry loseSound;
     [SerializeField] private SoundEntry naturalBlackjackSound;
+    [SerializeField] private SoundEntry nowaySound;
+
+
+    //SeriouslySnd.wav
     [SerializeField] private SoundEntry resetSound;
+    [SerializeField] private SoundEntry seriouslySound;
+
+
     [SerializeField] private SoundEntry startupSound;
     [SerializeField] private SoundEntry surrenderSound;
     [SerializeField] private SoundEntry tieSound;
@@ -169,6 +187,8 @@ namespace Blackjack
         private int  _activeHandIndex; // 0 = player, 1 = split
 
         private int _doubleDownExtraBet; // extra bet deducted when doubling down
+        // Tracks which split hand (index 0 / 1) was doubled down; used to compute per-hand loss count.
+        private readonly bool[] _splitHandDoubledDown = new bool[2];
         private int _savedBetBeforeAction; // bet amount before split/double-down, restored next round
         private int _betBeforeMartingale;  // bet placed before Martingale doubling; restored on a Martingale win
 
@@ -480,8 +500,44 @@ namespace Blackjack
             if (startupSound.HasClip && audioSource != null)
                 startupSound.Play(audioSource);
 
+            // Ensure the game starts in a fully clean visual and logical state
+            // regardless of how the previous session ended (crash, force-quit, etc.).
+            StopBlackjackCelebration();
+            martingalePopup?.Hide();
+
+            DestroyCardViews(_playerCardViews);
+            DestroyCardViews(_splitCardViews);
+            DestroyCardViews(_dealerCardViews);
+
+            _playerHand.Clear();
+            _splitHand.Clear();
+            _dealerHand.Clear();
+            _dealerHoleCardView      = null;
+            _isSplitRound            = false;
+            _activeHandIndex         = 0;
+            _savedBetBeforeAction    = 0;
+            _betBeforeMartingale     = 0;
+            _doubleDownExtraBet      = 0;
+            _splitHandDoubledDown[0] = false;
+            _splitHandDoubledDown[1] = false;
+
+            chipBetting?.ClearBetArea();
+
             _playerMoney = startingMoney;
             RefreshMoneyLabel();
+
+            _consecutiveLosses       = 0;
+            _totalLosses             = 0;
+            _totalAmountLost         = 0;
+            _playerScore             = 0;
+            _lastRoundBet            = 0;
+            _martingaleWin           = false;
+            _playerWon               = false;
+            _martingalePopupShown    = false;
+            _inMartingaleMode        = false;
+            _pendingMartingaleDouble = false;
+
+            _state = GameState.Idle;
 
             if (chipBetting != null)
                 chipBetting.OnBetChanged += OnBetChangedHandler;
@@ -506,6 +562,48 @@ namespace Blackjack
         {
             if (chipBetting != null)
                 chipBetting.OnBetChanged -= OnBetChangedHandler;
+        }
+
+        private void OnApplicationQuit()
+        {
+            // Stop all running coroutines so nothing fires after shutdown begins.
+            StopAllCoroutines();
+            _doubleBJSoundPlaying = false;
+
+            // Clear all hand and card state.
+            DestroyCardViews(_playerCardViews);
+            DestroyCardViews(_splitCardViews);
+            DestroyCardViews(_dealerCardViews);
+
+            _playerHand.Clear();
+            _splitHand.Clear();
+            _dealerHand.Clear();
+            _dealerHoleCardView   = null;
+            _isSplitRound         = false;
+            _activeHandIndex      = 0;
+            _savedBetBeforeAction = 0;
+            _betBeforeMartingale  = 0;
+            _doubleDownExtraBet        = 0;
+            _splitHandDoubledDown[0]   = false;
+            _splitHandDoubledDown[1]   = false;
+
+            // Clear the bet area.
+            chipBetting?.ClearBetArea();
+
+            // Reset all counters and mode flags.
+            _playerMoney             = 0;
+            _consecutiveLosses       = 0;
+            _totalLosses             = 0;
+            _totalAmountLost         = 0;
+            _playerScore             = 0;
+            _lastRoundBet            = 0;
+            _martingaleWin           = false;
+            _playerWon               = false;
+            _martingalePopupShown    = false;
+            _inMartingaleMode        = false;
+            _pendingMartingaleDouble = false;
+
+            _state = GameState.Idle;
         }
 
         // ──────────────────────────────────────────────────────────────────────────
@@ -1094,6 +1192,8 @@ namespace Blackjack
             // this coroutine starts stays visible during the deal animation.
             _savedBetBeforeAction = CurrentBet;
             _doubleDownExtraBet = CurrentBet;
+            if (_isSplitRound)
+                _splitHandDoubledDown[_activeHandIndex] = true;
             _playerMoney -= _doubleDownExtraBet;
             RefreshMoneyLabel();
             chipBetting?.DoubleBetChips();
@@ -1122,7 +1222,7 @@ namespace Blackjack
                 }
 
                 PlayLoseSound();
-                RecordRoundOutcome(true, lostAmount: CurrentBet + _doubleDownExtraBet, scoreDelta: -1, lossCount: 2);
+                RecordRoundOutcome(true, lostAmount: CurrentBet + _doubleDownExtraBet, scoreDelta: -1, lossCount: _isSplitRound ? 1 : 2);
                 SetStatus($"Busted");
                 yield return StartCoroutine(EndRound());
                 yield break;
@@ -1691,6 +1791,8 @@ namespace Blackjack
                 Hand[]   hands  = { _playerHand, _splitHand };
                 string[] labels = { "Hand 1", "Hand 2" };
 
+                int splitLossCount = 0;
+
                 for (int i = 0; i < hands.Length; i++)
                 {
                     int s = hands[i].BestValue();
@@ -1701,9 +1803,10 @@ namespace Blackjack
                         results.Add(ColorizeText($"{labels[i]}: Bust", LoseColor));
                         anyLoss = true;
                         splitLostAmount += handBet;
+                        splitLossCount  += 1 + (_splitHandDoubledDown[i] ? 1 : 0);
                         ApplyPayout(PayoutResult.Lose, handBet);
                     }
-                    else if (s == BlackjackValue || dealerBust || s > dealerScore)
+                    else if (dealerBust || s > dealerScore)
                     {
                         results.Add(ColorizeText($"{labels[i]}: Win", WinColor));
                         anyWin = true;
@@ -1714,6 +1817,7 @@ namespace Blackjack
                         results.Add(ColorizeText($"{labels[i]}: Lose", LoseColor));
                         anyLoss = true;
                         splitLostAmount += handBet;
+                        splitLossCount  += 1 + (_splitHandDoubledDown[i] ? 1 : 0);
                         ApplyPayout(PayoutResult.Lose, handBet);
                     }
                     else
@@ -1724,6 +1828,7 @@ namespace Blackjack
                             results.Add(ColorizeText($"{labels[i]}: Lose", LoseColor));
                             anyLoss = true;
                             splitLostAmount += handBet;
+                            splitLossCount  += 1 + (_splitHandDoubledDown[i] ? 1 : 0);
                             ApplyPayout(PayoutResult.Lose, handBet);
                         }
                         else
@@ -1745,13 +1850,12 @@ namespace Blackjack
                 int  splitScoreDelta = anyWin && !anyLoss ? +1 : anyLoss && !anyWin ? -1 : 0;
                 // If the split produced no net score change, leave the Martingale counter completely untouched.
                 bool splitNeutral = splitScoreDelta == 0;
-                // Both hands lost — count as 2 losses toward the streak.
-                bool bothHandsLost = anyLoss && !anyWin && !anyPush;
+                // Each losing hand contributes 1 base loss + 1 extra if it was doubled down.
                 RecordRoundOutcome(isLoss: anyLoss && !anyWin, lostAmount: splitLostAmount,
                     scoreDelta: splitScoreDelta,
                     isPush: !anyWin && !anyLoss || splitPush,
                     isMartingaleNeutral: splitNeutral,
-                    lossCount: bothHandsLost ? 2 : 1);
+                    lossCount: splitLossCount > 0 ? splitLossCount : 1);
                 SetStatus(string.Join("  |  ", results));
             }
             else
