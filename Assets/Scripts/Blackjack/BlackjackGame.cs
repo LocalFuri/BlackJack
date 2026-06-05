@@ -112,16 +112,24 @@ namespace Blackjack
     [SerializeField] private SoundEntry loseSound;
     [SerializeField] private SoundEntry naturalBlackjackSound;
     [SerializeField] private SoundEntry nowaySound;
-
-
-    //SeriouslySnd.wav
     [SerializeField] private SoundEntry resetSound;
     [SerializeField] private SoundEntry seriouslySound;
-
-
     [SerializeField] private SoundEntry startupSound;
     [SerializeField] private SoundEntry surrenderSound;
+    [SerializeField] private SoundEntry thegameisriggedSound;
+    [SerializeField] private SoundEntry thissucksSound;
     [SerializeField] private SoundEntry tieSound;
+    [SerializeField] private SoundEntry touchmeandiwill16Sound;
+    [SerializeField] private SoundEntry trythatagainSound;
+    [SerializeField] private SoundEntry unbelievableSound;
+    [SerializeField] private SoundEntry whatthefuckSound;
+    [SerializeField] private SoundEntry youcannotaffordmeSound;
+    [SerializeField] private SoundEntry youowemeSound;
+    [SerializeField] private SoundEntry yourcarisparkedSound;
+    [SerializeField] private SoundEntry yourecheatingSound;
+    [SerializeField] private SoundEntry yourekiddingmeSound;
+    [SerializeField] private SoundEntry youwillfryinhellSound;
+    [SerializeField] private SoundEntry youwillpayforthatSound;
     [SerializeField] private SoundEntry winSound;
     [SerializeField] private SoundEntry yuhuSound;
 
@@ -1210,6 +1218,17 @@ namespace Blackjack
 
             if (ActiveHand.IsBust())
             {
+                if (_isSplitRound)
+                {
+                    // In a split round, advance to hand 2 (or dealer turn if this is already hand 2).
+                    // ResolveRound() handles all accounting via _splitHandDoubledDown.
+                    PlayLoseSound();
+                    SetStatus($"Hand {_activeHandIndex + 1} Busted");
+                    yield return new WaitForSeconds(0.5f);
+                    yield return StartCoroutine(AdvanceOrDealerTurn());
+                    yield break;
+                }
+
                 yield return StartCoroutine(RevealHoleCard());
                 UpdateScoreLabels(revealDealer: true);
                 if (IsDealerNaturalBlackjackLoss(_playerHand))
@@ -1222,7 +1241,7 @@ namespace Blackjack
                 }
 
                 PlayLoseSound();
-                RecordRoundOutcome(true, lostAmount: CurrentBet + _doubleDownExtraBet, scoreDelta: -1, lossCount: _isSplitRound ? 1 : 2);
+                RecordRoundOutcome(true, lostAmount: CurrentBet + _doubleDownExtraBet, scoreDelta: -1, lossCount: 2);
                 SetStatus($"Busted");
                 yield return StartCoroutine(EndRound());
                 yield break;
