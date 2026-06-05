@@ -222,6 +222,9 @@ namespace Blackjack
         // True after the player explicitly declines the Martingale popup. Suppresses re-prompting on Deal until the streak resets.
         private bool _martingaleDeclined;
 
+        // True while auto-play is active (dealer rules + auto-deal next round).
+        private bool _autoPlayEnabled;
+
         private static readonly Color MartingaleModeGoldColor = new Color(1f, 0.85f, 0.3f, 1f);
 
         // Running score: +1 per win, -1 per loss, 0 for push or surrender.
@@ -258,6 +261,9 @@ namespace Blackjack
 
         /// <summary>True when the current round has ended and the table is showing results.</summary>
         public bool IsRoundOver => _state == GameState.RoundOver;
+
+        /// <summary>True while auto-play mode is active.</summary>
+        public bool IsAutoPlayEnabled => _autoPlayEnabled;
 
         /// <summary>True while the developer menu is open. Used by <see cref="ChipBetting"/> to suppress chip input.</summary>
         public bool IsMenuOpen => menuController != null && menuController.IsMenuOpen;
@@ -324,8 +330,8 @@ namespace Blackjack
         {
             Debug.Log($"[Martingale] ShowMartingalePopup: autoPlay={menuController?.IsMartingaleAutoPlay} popupNull={martingalePopup == null}");
 
-            // Auto-play: skip popup, enter Martingale mode and deal immediately.
-            if (menuController != null && menuController.IsMartingaleAutoPlay)
+            // Auto-play / Martingale-auto: skip popup, enter Martingale mode and deal immediately.
+            if (ShouldAutoConfirmMartingalePopup())
             {
                 _inMartingaleMode        = true;
                 _betBeforeMartingale     = chipBetting != null ? chipBetting.TotalBet : 0;
@@ -544,6 +550,7 @@ namespace Blackjack
             _martingalePopupShown    = false;
             _inMartingaleMode        = false;
             _pendingMartingaleDouble = false;
+            _autoPlayEnabled         = false;
 
             _state = GameState.Idle;
 
@@ -564,6 +571,9 @@ namespace Blackjack
             RefreshStreakLabel();
             SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
             SetStatus("Press Deal to start");
+
+            if (menuController != null && menuController.IsAutoplayMenuEnabled)
+                StartAutoplayFromMenu();
         }
 
         private void OnDestroy()
@@ -980,6 +990,83 @@ namespace Blackjack
         /// <summary>Turns off "Always Lose" and "Override Strategy" before any test-button round.</summary>
         private void DeactivateTestCheckboxes() => menuController?.DisableTestCheckboxes();
 
+        /// <summary>Enables or disables table auto-play without starting a round.</summary>
+        public void SetAutoplayEnabled(bool enabled)
+        {
+            _autoPlayEnabled = enabled;
+            SetStatus(_autoPlayEnabled ? "Auto-play ON" : "Auto-play OFF");
+        }
+
+        /// <summary>Enables auto-play when the menu Autoplay option is on at game load.</summary>
+        public void StartAutoplayFromMenu()
+        {
+            if (_autoPlayEnabled)
+                return;
+
+            SetAutoplayEnabled(true);
+
+            if (_state == GameState.Idle || _state == GameState.RoundOver)
+                OnDeal();
+        }
+
+        /// <summary>Toggles auto-play mode. While active the game follows basic strategy
+        /// (hit/stand/split/double/surrender), respects Martingale menu settings, and auto-deals.</summary>
+        public void OnAutoplay()
+        {
+            SetAutoplayEnabled(!_autoPlayEnabled);
+
+            if (_autoPlayEnabled && (_state == GameState.Idle || _state == GameState.RoundOver))
+                OnDeal();
+        }
+
+        /// <summary>True when the Martingale popup should be skipped and Martingale entered automatically.</summary>
+        private bool ShouldAutoConfirmMartingalePopup() =>
+            menuController != null &&
+            (menuController.IsMartingaleAutoPlay || (_autoPlayEnabled && menuController.IsMartingaleActive));
+
+        /// <summary>Executes the basic-strategy recommendation for the active hand during auto-play.</summary>
+        private IEnumerator RunAutoplayDecision()
+        {
+            if (!_autoPlayEnabled || _state != GameState.PlayerTurn)
+                yield break;
+
+            // Hold if the menu is open — resume once it closes.
+            yield return new WaitUntil(() => !IsMenuOpen);
+            yield return new WaitForSeconds(0.4f);
+
+            StrategyAction recommendation = BasicStrategyTable.GetRecommendation(
+                ActiveHand,
+                _dealerUpcardSnapshot,
+                canSplit: CanSplit(),
+                canDouble: CanDoubleDown(),
+                canSurrender: CanSurrender());
+
+            switch (recommendation)
+            {
+                case StrategyAction.Hit:
+                    yield return StartCoroutine(PlayerHit());
+                    break;
+                case StrategyAction.Stand:
+                    knockSound.Play(audioSource);
+                    yield return new WaitForSeconds(0.25f);
+                    yield return StartCoroutine(AdvanceOrDealerTurn());
+                    break;
+                case StrategyAction.Double:
+                    yield return StartCoroutine(PerformDoubleDown());
+                    break;
+                case StrategyAction.Split:
+                    _savedBetBeforeAction = CurrentBet;
+                    _playerMoney -= CurrentBet;
+                    RefreshMoneyLabel();
+                    chipBetting?.DoubleBetChips();
+                    yield return StartCoroutine(PerformSplit());
+                    break;
+                case StrategyAction.Surrender:
+                    yield return StartCoroutine(PlayerSurrender());
+                    break;
+            }
+        }
+
         // ──────────────────────────────────────────────────────────────────────────
         // Round Flow
         // ──────────────────────────────────────────────────────────────────────────
@@ -1033,10 +1120,10 @@ namespace Blackjack
                 if (AlwaysLose)
                 {
                     // Always Lose: treat double-BJ push as a loss.
-                    PlayLoseSound();
                     RecordRoundOutcome(true, lostAmount: CurrentBet, scoreDelta: -1);
                     SetStatus("You lose", LoseColor);
                     ApplyPayout(PayoutResult.Lose, CurrentBet);
+                    yield return StartCoroutine(PlayLoseSoundAndWait());
                 }
                 else
                 {
@@ -1057,10 +1144,10 @@ namespace Blackjack
                 if (AlwaysLose)
                 {
                     // Always Lose: treat a natural blackjack as a loss.
-                    PlayLoseSound();
                     RecordRoundOutcome(true, lostAmount: CurrentBet, scoreDelta: -1);
                     SetStatus("You lose", LoseColor);
                     ApplyPayout(PayoutResult.Lose, CurrentBet);
+                    yield return StartCoroutine(PlayLoseSoundAndWait());
                 }
                 else
                 {
@@ -1101,6 +1188,12 @@ namespace Blackjack
 
             RefreshStrategyHighlight();
 
+            if (_autoPlayEnabled)
+            {
+                yield return StartCoroutine(RunAutoplayDecision());
+                yield break;
+            }
+
             if (!hasPair && _playerHand.BestValue() <= AutoHitMaxScore)
             {
                 yield return new WaitForSeconds(0.3f);
@@ -1108,9 +1201,7 @@ namespace Blackjack
                 yield break;
             }
 
-            bool shouldStand = ShouldAutoStand(_playerHand);
-
-            if (shouldStand)
+            if (ShouldAutoStand(_playerHand))
             {
                 knockSound.Play(audioSource);
                 yield return new WaitForSeconds(0.3f);
@@ -1172,6 +1263,12 @@ namespace Blackjack
             SetStatus($"Players turn Hand 1");
             RefreshStrategyHighlight();
 
+            if (_autoPlayEnabled)
+            {
+                yield return StartCoroutine(RunAutoplayDecision());
+                yield break;
+            }
+
             if (ActiveHand.BestValue() <= AutoHitMaxScore)
             {
                 yield return new WaitForSeconds(0.3f);
@@ -1195,9 +1292,8 @@ namespace Blackjack
         private IEnumerator PerformDoubleDown()
         {
             SetButtonState(dealEnabled: false, actionEnabled: false, splitEnabled: false);
+            SetStatus("Doubling down");
 
-            // Status is set after the deal so a deviation message shown just before
-            // this coroutine starts stays visible during the deal animation.
             _savedBetBeforeAction = CurrentBet;
             _doubleDownExtraBet = CurrentBet;
             if (_isSplitRound)
@@ -1206,7 +1302,7 @@ namespace Blackjack
             RefreshMoneyLabel();
             chipBetting?.DoubleBetChips();
             ddSound.Play(audioSource); //mark dd sound
-            yield return new WaitForSeconds(doubleDownBetPause);
+            yield return new WaitForSeconds(0.5f);
             yield return StartCoroutine(
                 DealCardTo(ActiveHand, ActiveViews,
                            _activeHandIndex == 0 ? playerCardArea : splitCardArea,
@@ -1222,9 +1318,8 @@ namespace Blackjack
                 {
                     // In a split round, advance to hand 2 (or dealer turn if this is already hand 2).
                     // ResolveRound() handles all accounting via _splitHandDoubledDown.
-                    PlayLoseSound();
                     SetStatus($"Hand {_activeHandIndex + 1} Busted");
-                    yield return new WaitForSeconds(0.5f);
+                    yield return StartCoroutine(PlayLoseSoundAndWait());
                     yield return StartCoroutine(AdvanceOrDealerTurn());
                     yield break;
                 }
@@ -1240,9 +1335,9 @@ namespace Blackjack
                     yield break;
                 }
 
-                PlayLoseSound();
                 RecordRoundOutcome(true, lostAmount: CurrentBet + _doubleDownExtraBet, scoreDelta: -1, lossCount: 2);
                 SetStatus($"Busted");
+                yield return StartCoroutine(PlayLoseSoundAndWait());
                 yield return StartCoroutine(EndRound());
                 yield break;
             }
@@ -1262,7 +1357,9 @@ namespace Blackjack
                 SetButtonState(dealEnabled: false, actionEnabled: true, splitEnabled: false, doubleDownEnabled: CanDoubleDown());
                 RefreshStrategyHighlight();
 
-                if (ActiveHand.BestValue() <= AutoHitMaxScore)
+                if (_autoPlayEnabled)
+                    yield return StartCoroutine(RunAutoplayDecision());
+                else if (ActiveHand.BestValue() <= AutoHitMaxScore)
                 {
                     yield return new WaitForSeconds(0.3f);
                     yield return StartCoroutine(AutoHitLoop());
@@ -1310,12 +1407,11 @@ namespace Blackjack
                 
               string label = _isSplitRound ? $"Hand {_activeHandIndex + 1} busts" : "Bust!";
               SetStatus($"{label}", LoseColor);
-              PlayLoseSound();
+              yield return StartCoroutine(PlayLoseSoundAndWait());
 
                 if (_isSplitRound)
                 {
                     // Always advance to next hand or dealer turn so both hands get resolved.
-                    yield return new WaitForSeconds(0.5f);
                     yield return StartCoroutine(AdvanceOrDealerTurn());
                 }
                 else
@@ -1348,8 +1444,11 @@ namespace Blackjack
 
             SetButtonState(dealEnabled: false, actionEnabled: true, splitEnabled: false);
             SetStatus(_isSplitRound
-                ? $"Players turn Hand 1"
-                : $"Your turn");
+                ? $"Players turn Hand {_activeHandIndex + 1}"
+                : "Your turn");
+
+            if (_autoPlayEnabled)
+                yield return StartCoroutine(RunAutoplayDecision());
         }
 
         private IEnumerator DealerTurn()
@@ -1861,7 +1960,7 @@ namespace Blackjack
 
                 if (anyWin && !anyLoss) { StartCoroutine(PlayWinAndChipRoutine(useCelebration: _inMartingaleMode, playResetSound: _inMartingaleMode)); _playerWon = true; }
                 else if (anyWin && anyLoss) PlayTieSound();
-                else if (anyLoss)           PlayLoseSound();
+                else if (anyLoss)           yield return StartCoroutine(PlayLoseSoundAndWait());
                 else                        PlayTieSound();
 
                 // Split 1W/1L or 1W/1Push counts as a push for the Martingale counter — streak is neither incremented nor reset.
@@ -1890,16 +1989,22 @@ namespace Blackjack
                 if      (IsNaturalBlackjack(_playerHand)) { StartCoroutine(PlayWinAndChipRoutine(useCelebration: true, playResetSound: isMartingaleWin));             RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.BlackjackWin, winBet); }
                 else if (dealerBust)                    { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin));  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
                 else if (p > dealerScore)               { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin));  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
-                else if (dealerScore > p)               { PlayLoseSound(); RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1, lossCount: _doubleDownExtraBet > 0 ? 2 : 1);  SetStatus($"You lose",LoseColor); ApplyPayout(PayoutResult.Lose, totalBet); }
+                else if (dealerScore > p)
+                {
+                    RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1, lossCount: _doubleDownExtraBet > 0 ? 2 : 1);
+                    SetStatus($"You lose", LoseColor);
+                    ApplyPayout(PayoutResult.Lose, totalBet);
+                    yield return StartCoroutine(PlayLoseSoundAndWait());
+                }
                 else
                 {
                     if (AlwaysLose)
                     {
                         // Always Lose: treat push as a loss.
-                        PlayLoseSound();
                         RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1, lossCount: _doubleDownExtraBet > 0 ? 2 : 1);
                         SetStatus("You lose", LoseColor);
                         ApplyPayout(PayoutResult.Lose, totalBet);
+                        yield return StartCoroutine(PlayLoseSoundAndWait());
                     }
                     else
                     {
@@ -1986,9 +2091,18 @@ namespace Blackjack
 
             Debug.Log($"[Martingale] EndRound: popup NOT shown. shown={_martingalePopupShown} inMode={_inMartingaleMode} declined={_martingaleDeclined}");
 
-            // Auto-deal the next round when already in Martingale mode and auto-play is enabled.
-            if (_inMartingaleMode && _pendingMartingaleDouble && (menuController?.IsMartingaleAutoPlay ?? false))
-                OnDeal();
+            // Auto-deal the next round when Martingale auto-play or table auto-play is active.
+            if (_state == GameState.RoundOver)
+            {
+                if (_inMartingaleMode && _pendingMartingaleDouble && (menuController?.IsMartingaleAutoPlay ?? false))
+                    OnDeal();
+                else if (_autoPlayEnabled)
+                {
+                    yield return new WaitForSeconds(0.6f);
+                    yield return new WaitUntil(() => !IsMenuOpen);
+                    OnDeal();
+                }
+            }
             // State stays RoundOver — chip click or Deal press drives the next transition.
         }
 
@@ -2159,7 +2273,6 @@ namespace Blackjack
 
         private IEnumerator RevealDealerHoleForNaturalBlackjack()
         {
-            if (IsNaturalBlackjack(_dealerHand))
             yield return StartCoroutine(RevealHoleCard());
             UpdateScoreLabels(revealDealer: true);
         }
@@ -2702,6 +2815,14 @@ namespace Blackjack
         private void PlayLoseSound()
         {
             loseSound.Play(audioSource);
+        }
+
+        /// <summary>Plays the lose sound and waits for it to finish before returning.</summary>
+        private IEnumerator PlayLoseSoundAndWait()
+        {
+            loseSound.Play(audioSource);
+            if (loseSound.HasClip)
+                yield return new WaitForSeconds(loseSound.Length);
         }
 
         /// <summary>Plays lose and damnit sounds when the dealer has a natural blackjack.</summary>

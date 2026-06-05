@@ -27,8 +27,10 @@ namespace Blackjack
         [SerializeField] private GameObject ddTestButton;
         [SerializeField] private GameObject testSplitButton;
         [SerializeField] private GameObject dealerBlackjackTestButton;
+        [SerializeField] private GameObject autoplayButton;
 
         [Header("Checkboxes")]
+        [SerializeField] private Toggle autoplayToggle;
         [SerializeField] private Toggle blackjackTestToggle;
         [SerializeField] private Toggle bjAllToggle;
         [SerializeField] private Toggle ddTestToggle;
@@ -112,6 +114,7 @@ namespace Blackjack
             ApplySettings();
 
             // Register callbacks after applying so initial apply does not trigger saves.
+            autoplayToggle?.onValueChanged.AddListener(OnAutoplayToggled);
             blackjackTestToggle?.onValueChanged.AddListener(OnBlackjackTestToggled);
             bjAllToggle?.onValueChanged.AddListener(OnBjAllToggled);
             ddTestToggle?.onValueChanged.AddListener(OnDdTestToggled);
@@ -127,7 +130,7 @@ namespace Blackjack
             testSplitRankSlider?.onValueChanged.AddListener(OnTestSplitRankChanged);
 
             // Play toggle sound whenever any checkbox is turned on.
-            foreach (var toggle in new[] { blackjackTestToggle, bjAllToggle, ddTestToggle,
+            foreach (var toggle in new[] { autoplayToggle, blackjackTestToggle, bjAllToggle, ddTestToggle,
                                            testSplitToggle, dealerBjTestToggle, overrideStrategyToggle,
                                            alwaysLoseToggle, showStrategyToggle,
                                            martingaleActiveToggle, martingaleAutoPlayToggle })
@@ -185,6 +188,7 @@ namespace Blackjack
         /// </summary>
         private void BindRowToggleReferences()
         {
+            autoplayToggle        ??= FindMenuToggle("AutoplayToggle");
             dealerBjTestToggle    ??= FindMenuToggle("DealerBJTestToggle");
             blackjackTestToggle   ??= FindMenuToggle("BlackjackTestToggle");
             bjAllToggle           ??= FindMenuToggle("BJAllToggle");
@@ -231,6 +235,7 @@ namespace Blackjack
         /// </summary>
         private void EnsureToggleRowPlacement()
         {
+            ReparentToggleToRow("AutoplayToggle", "AutoplayRow");
             ReparentToggleToRow("DealerBJTestToggle", "DealerBJRow");
             ReparentToggleToRow("BlackjackTestToggle", "BJTestRow");
             ReparentToggleToRow("BJAllToggle", "BJAllRow");
@@ -253,6 +258,7 @@ namespace Blackjack
 
             foreach (string rowName in new[]
                      {
+                         "AutoplayRow",
                          "DealerBJRow",
                          "BJTestRow",
                          "BJAllRow",
@@ -419,6 +425,7 @@ namespace Blackjack
             _settings.martingaleAutoPlay      = false;
             _settings.alwaysLoseEnabled       = false;
             _settings.overrideStrategyEnabled = false;
+            _settings.autoplayEnabled         = false;
 
             PersistSettingsToFile();
         }
@@ -426,6 +433,16 @@ namespace Blackjack
         // ──────────────────────────────────────────────────────────────────────────
         // Toggle callbacks
         // ──────────────────────────────────────────────────────────────────────────
+
+        private void OnAutoplayToggled(bool value)
+        {
+            autoplayButton?.SetActive(value);
+            _settings.autoplayEnabled = value;
+            _settingsDirty = true;
+
+            if (!value)
+                blackjackGame?.SetAutoplayEnabled(false);
+        }
 
         private void OnBlackjackTestToggled(bool value)
         {
@@ -699,6 +716,9 @@ namespace Blackjack
         public bool IsMartingaleAutoPlay =>
             _settings.martingaleThreshold > 0 && _settings.martingaleAutoPlay;
 
+        /// <summary>When true, the Autoplay test button is shown and the game should auto-play on load.</summary>
+        public bool IsAutoplayMenuEnabled => _settings.autoplayEnabled;
+
         /// <summary>
         /// Programmatically activates the "Martingale is Active" checkbox.
         /// Used when the threshold is exceeded and the popup is about to be shown.
@@ -746,8 +766,11 @@ namespace Blackjack
         {
             if (menuPanel == null) return;
 
-            // Only allow opening when no round is in progress.
-            if (!_menuVisible && blackjackGame != null && !blackjackGame.IsBettingAllowed && !blackjackGame.IsRoundOver)
+            // Allow opening during autoplay so the player can adjust settings mid-run.
+            bool inAutoPlay = blackjackGame != null && blackjackGame.IsAutoPlayEnabled;
+
+            // Only allow opening when no round is in progress (unless autoplay is running).
+            if (!_menuVisible && !inAutoPlay && blackjackGame != null && !blackjackGame.IsBettingAllowed && !blackjackGame.IsRoundOver)
                 return;
 
             if (_menuVisible)
@@ -775,6 +798,9 @@ namespace Blackjack
             }
             SetMenuVisible(false);
             if (playSound) blackjackGame?.PlayCloseSound();
+
+            if (_settings.autoplayEnabled)
+                blackjackGame?.StartAutoplayFromMenu();
         }
 
         /// <summary>Writes the current settings to <see cref="SaveFilePath"/> as JSON.</summary>
@@ -838,6 +864,10 @@ namespace Blackjack
             if (testSplitToggle != null)
                 testSplitToggle.SetIsOnWithoutNotify(_settings.testSplitEnabled);
             testSplitButton?.SetActive(_settings.testSplitEnabled);
+
+            if (autoplayToggle != null)
+                autoplayToggle.SetIsOnWithoutNotify(_settings.autoplayEnabled);
+            autoplayButton?.SetActive(_settings.autoplayEnabled);
 
             if (dealerBjTestToggle != null)
                 dealerBjTestToggle.SetIsOnWithoutNotify(_settings.dealerBjTestEnabled);
