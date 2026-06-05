@@ -639,6 +639,8 @@ namespace Blackjack
             _dealerNaturalBJPlaying = false;
             _dealerNaturalBJEndTime = 0f;
 
+            strategyTableUI?.ResetToCanonical();
+
             // EndRound may have been interrupted before it could reset the bet after a win.
             ApplyPendingWinBetRestore();
 
@@ -1024,6 +1026,7 @@ namespace Blackjack
         {
             _isSplitRound = true;
             SetButtonState(dealEnabled: false, actionEnabled: false, splitEnabled: false);
+            RefreshStrategyHighlight();
 
             // Move card[1] from player hand to split hand
             CardData movedCard = _playerHand.Cards[1];
@@ -1046,13 +1049,11 @@ namespace Blackjack
             _splitCardViews.Add(movedView);
             _splitHand.AddCard(movedCard);
 
+            PlayCardSlideSound();
+            yield return new WaitForSeconds(0.5f);
             chipSound.Play(audioSource);
             if (chipSound.Length > 0f)
                 yield return new WaitForSeconds(chipSound.Length);
-            PlayCardSlideSound();
-            yield return new WaitForSeconds(0.5f);
-
-            bool isAces = _playerHand.Cards[0].Rank == Rank.Ace;
 
             // Deal second card to each hand
             yield return StartCoroutine(DealCardTo(_playerHand,  _playerCardViews, playerCardArea, faceUp: true));
@@ -1060,14 +1061,6 @@ namespace Blackjack
 
             UpdateScoreLabels(revealDealer: false);
             _activeHandIndex = 0;
-
-            if (isAces)
-            {
-                SetStatus("Split Aces — one card each. Standing.");
-                yield return new WaitForSeconds(0.5f);
-                yield return StartCoroutine(DealerTurn());
-                yield break;
-            }
 
             SetButtonState(dealEnabled: false, actionEnabled: true, splitEnabled: false, doubleDownEnabled: CanDoubleDown());
             SetStatus($"Players turn Hand 1");
@@ -1129,7 +1122,7 @@ namespace Blackjack
                 }
 
                 PlayLoseSound();
-                RecordRoundOutcome(true, lostAmount: CurrentBet + _doubleDownExtraBet, scoreDelta: -1);
+                RecordRoundOutcome(true, lostAmount: CurrentBet + _doubleDownExtraBet, scoreDelta: -1, lossCount: 2);
                 SetStatus($"Busted");
                 yield return StartCoroutine(EndRound());
                 yield break;
@@ -1742,7 +1735,7 @@ namespace Blackjack
                     }
                 }
 
-                if (anyWin)       { StartCoroutine(PlayWinAndChipRoutine(useCelebration: _inMartingaleMode && anyWin && !anyLoss, playResetSound: _inMartingaleMode && anyWin && !anyLoss)); _playerWon = true; }
+                if (anyWin)       { StartCoroutine(PlayWinAndChipRoutine(useCelebration: _inMartingaleMode && anyWin && !anyLoss, playResetSound: _inMartingaleMode && anyWin && !anyLoss, playChipSound: !(anyWin && anyLoss))); _playerWon = true; }
                 else if (anyLoss) PlayLoseSound();
                 else              PlayTieSound();
 
@@ -1773,14 +1766,14 @@ namespace Blackjack
                 if      (IsNaturalBlackjack(_playerHand)) { StartCoroutine(PlayWinAndChipRoutine(useCelebration: true, playResetSound: isMartingaleWin));             RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.BlackjackWin, winBet); }
                 else if (dealerBust)                    { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin));  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
                 else if (p > dealerScore)               { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin));  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(_martingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
-                else if (dealerScore > p)               { PlayLoseSound(); RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1);  SetStatus($"You lose",LoseColor); ApplyPayout(PayoutResult.Lose, totalBet); }
+                else if (dealerScore > p)               { PlayLoseSound(); RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1, lossCount: _doubleDownExtraBet > 0 ? 2 : 1);  SetStatus($"You lose",LoseColor); ApplyPayout(PayoutResult.Lose, totalBet); }
                 else
                 {
                     if (AlwaysLose)
                     {
                         // Always Lose: treat push as a loss.
                         PlayLoseSound();
-                        RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1);
+                        RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1, lossCount: _doubleDownExtraBet > 0 ? 2 : 1);
                         SetStatus("You lose", LoseColor);
                         ApplyPayout(PayoutResult.Lose, totalBet);
                     }
@@ -2466,7 +2459,7 @@ namespace Blackjack
         /// Pass <paramref name="useCelebration"/> for Martingale wins and natural blackjacks.
         /// Pass <paramref name="playResetSound"/> only for Martingale wins.
         /// </summary>
-        private IEnumerator PlayWinAndChipRoutine(bool useCelebration = false, bool playResetSound = false)
+        private IEnumerator PlayWinAndChipRoutine(bool useCelebration = false, bool playResetSound = false, bool playChipSound = true)
         {
             _winPresentationComplete = false;
 
@@ -2497,10 +2490,10 @@ namespace Blackjack
             if (!ApplyPendingWinBetRestore())
                 chipBetting?.RestoreBetFromSnapshot();
 
-            if (chipSound.HasClip && audioSource != null)
+            if (playChipSound && chipSound.HasClip && audioSource != null)
                 chipSound.Play(audioSource);
 
-            _winSoundEndTime = Time.time + chipSound.Length;
+            _winSoundEndTime = Time.time + (playChipSound ? chipSound.Length : 0f);
             _winPresentationComplete = true;
         }
         private IEnumerator PlayResetSoundAfterDelay(float delay)

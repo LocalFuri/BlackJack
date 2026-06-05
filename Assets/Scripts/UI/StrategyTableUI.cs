@@ -161,6 +161,14 @@ namespace Blackjack.UI
             if (labelCell != null) ShowHighlight(labelCell, isLabel: true);
         }
 
+        /// <summary>Clears the highlight and restores all cells to their canonical strategy colors (surrender and double always shown).</summary>
+        public void ResetToCanonical()
+        {
+            EnsureBuilt();
+            ClearHighlight();
+            UpdateActionAvailability(canDouble: true, canSurrender: true);
+        }
+
         /// <summary>
         /// Re-colors all data cells to reflect which actions are currently available.
         /// R cells become H when surrender is not allowed; D cells become H when double is not allowed.
