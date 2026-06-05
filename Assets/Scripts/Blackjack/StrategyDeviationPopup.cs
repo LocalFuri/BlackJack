@@ -33,6 +33,15 @@ namespace Blackjack
         {
             UiOverlaySorting.Apply(gameObject, UiOverlaySorting.DeviationPopup);
 
+            // Ensure the popup card background is fully opaque regardless of the scene setting.
+            var popupCard = transform.Find("PopupCard");
+            if (popupCard != null)
+            {
+                var bg = popupCard.GetComponent<Image>();
+                if (bg != null)
+                    bg.color = new Color(0.0482093133f, 0.230188608f, 0.0939902738f, 1f);
+            }
+
             keepButton.onClick.AddListener(OnKeepClicked);
             reconsiderButton.onClick.AddListener(OnReconsiderClicked);
             ApplyButtonLabels();

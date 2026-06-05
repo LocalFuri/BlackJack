@@ -28,6 +28,15 @@ namespace Blackjack
         {
             UiOverlaySorting.Apply(gameObject, UiOverlaySorting.MartingalePopup);
 
+            // Force the card background to be fully opaque, matching the menu panel color.
+            var popupCard = transform.Find("PopupCard");
+            if (popupCard != null)
+            {
+                var bg = popupCard.GetComponent<Image>();
+                if (bg != null)
+                    bg.color = new Color(0.0482093133f, 0.230188608f, 0.0939902738f, 1f);
+            }
+
             doItButton.onClick.AddListener(OnDoItClicked);
             reconsiderButton.onClick.AddListener(OnReconsiderClicked);
             gameObject.SetActive(false);

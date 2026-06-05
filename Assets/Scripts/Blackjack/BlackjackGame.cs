@@ -1735,9 +1735,10 @@ namespace Blackjack
                     }
                 }
 
-                if (anyWin)       { StartCoroutine(PlayWinAndChipRoutine(useCelebration: _inMartingaleMode && anyWin && !anyLoss, playResetSound: _inMartingaleMode && anyWin && !anyLoss, playChipSound: !(anyWin && anyLoss))); _playerWon = true; }
-                else if (anyLoss) PlayLoseSound();
-                else              PlayTieSound();
+                if (anyWin && !anyLoss) { StartCoroutine(PlayWinAndChipRoutine(useCelebration: _inMartingaleMode, playResetSound: _inMartingaleMode)); _playerWon = true; }
+                else if (anyWin && anyLoss) PlayTieSound();
+                else if (anyLoss)           PlayLoseSound();
+                else                        PlayTieSound();
 
                 // Split 1W/1L or 1W/1Push counts as a push for the Martingale counter — streak is neither incremented nor reset.
                 bool splitPush = (anyWin && anyLoss) || (anyWin && anyPush && !anyLoss);
