@@ -26,12 +26,14 @@ namespace Blackjack
         [SerializeField] private GameObject bjAllButton;
         [SerializeField] private GameObject ddTestButton;
         [SerializeField] private GameObject testSplitButton;
+        [SerializeField] private GameObject dealerBlackjackTestButton;
 
         [Header("Checkboxes")]
         [SerializeField] private Toggle blackjackTestToggle;
         [SerializeField] private Toggle bjAllToggle;
         [SerializeField] private Toggle ddTestToggle;
         [SerializeField] private Toggle testSplitToggle;
+        [SerializeField] private Toggle dealerBjTestToggle;
         [SerializeField] private Toggle overrideStrategyToggle;
         [SerializeField] private Toggle alwaysLoseToggle;
         [SerializeField] private Toggle showStrategyToggle;
@@ -98,6 +100,7 @@ namespace Blackjack
 
             BindRowToggleReferences();
             EnsureToggleRowPlacement();
+            EnsureTestMenuRowOrder();
 
             _settings = new OptionsSettings
             {
@@ -113,6 +116,7 @@ namespace Blackjack
             bjAllToggle?.onValueChanged.AddListener(OnBjAllToggled);
             ddTestToggle?.onValueChanged.AddListener(OnDdTestToggled);
             testSplitToggle?.onValueChanged.AddListener(OnTestSplitToggled);
+            dealerBjTestToggle?.onValueChanged.AddListener(OnDealerBjTestToggled);
             overrideStrategyToggle?.onValueChanged.AddListener(OnOverrideStrategyToggled);
             alwaysLoseToggle?.onValueChanged.AddListener(OnAlwaysLoseToggled);
             showStrategyToggle?.onValueChanged.AddListener(OnShowStrategyToggled);
@@ -124,7 +128,7 @@ namespace Blackjack
 
             // Play toggle sound whenever any checkbox is turned on.
             foreach (var toggle in new[] { blackjackTestToggle, bjAllToggle, ddTestToggle,
-                                           testSplitToggle, overrideStrategyToggle,
+                                           testSplitToggle, dealerBjTestToggle, overrideStrategyToggle,
                                            alwaysLoseToggle, showStrategyToggle,
                                            martingaleActiveToggle, martingaleAutoPlayToggle })
             {
@@ -181,7 +185,12 @@ namespace Blackjack
         /// </summary>
         private void BindRowToggleReferences()
         {
-            showStrategyToggle = FindMenuToggle("ShowStrategyToggle");
+            dealerBjTestToggle    ??= FindMenuToggle("DealerBJTestToggle");
+            blackjackTestToggle   ??= FindMenuToggle("BlackjackTestToggle");
+            bjAllToggle           ??= FindMenuToggle("BJAllToggle");
+            ddTestToggle          ??= FindMenuToggle("DDTestToggle");
+            testSplitToggle       ??= FindMenuToggle("TestSplitToggle");
+            showStrategyToggle    = FindMenuToggle("ShowStrategyToggle");
             martingaleActiveToggle = FindMenuToggle("MartingaleActiveToggle");
             martingaleAutoPlayToggle = FindMenuToggle("MartingaleAutoPlayToggle");
 
@@ -222,9 +231,39 @@ namespace Blackjack
         /// </summary>
         private void EnsureToggleRowPlacement()
         {
+            ReparentToggleToRow("DealerBJTestToggle", "DealerBJRow");
+            ReparentToggleToRow("BlackjackTestToggle", "BJTestRow");
+            ReparentToggleToRow("BJAllToggle", "BJAllRow");
+            ReparentToggleToRow("DDTestToggle", "DDTestRow");
+            ReparentToggleToRow("TestSplitToggle", "TestSplitRow");
             ReparentToggleToRow("ShowStrategyToggle", "ShowStrategyRow");
             ReparentToggleToRow("MartingaleActiveToggle", "MartingaleActiveRow");
             ReparentToggleToRow("MartingaleAutoPlayToggle", "MartingaleAutoPlayRow");
+        }
+
+        /// <summary>Keeps test rows in menu order with Dealer BJ above Blackjack Test.</summary>
+        private void EnsureTestMenuRowOrder()
+        {
+            if (menuPanel == null) return;
+
+            int index = 0;
+            Transform title = menuPanel.transform.Find("TitleLabel");
+            if (title != null)
+                title.SetSiblingIndex(index++);
+
+            foreach (string rowName in new[]
+                     {
+                         "DealerBJRow",
+                         "BJTestRow",
+                         "BJAllRow",
+                         "DDTestRow",
+                         "TestSplitRow",
+                     })
+            {
+                Transform row = menuPanel.transform.Find(rowName);
+                if (row != null)
+                    row.SetSiblingIndex(index++);
+            }
         }
 
         private void ReparentToggleToRow(string toggleName, string rowName)
@@ -407,6 +446,13 @@ namespace Blackjack
         {
             testSplitButton?.SetActive(value);
             _settings.testSplitEnabled = value;
+            _settingsDirty = true;
+        }
+
+        private void OnDealerBjTestToggled(bool value)
+        {
+            dealerBlackjackTestButton?.SetActive(value);
+            _settings.dealerBjTestEnabled = value;
             _settingsDirty = true;
         }
 
@@ -786,6 +832,10 @@ namespace Blackjack
             if (testSplitToggle != null)
                 testSplitToggle.SetIsOnWithoutNotify(_settings.testSplitEnabled);
             testSplitButton?.SetActive(_settings.testSplitEnabled);
+
+            if (dealerBjTestToggle != null)
+                dealerBjTestToggle.SetIsOnWithoutNotify(_settings.dealerBjTestEnabled);
+            dealerBlackjackTestButton?.SetActive(_settings.dealerBjTestEnabled);
 
             if (overrideStrategyToggle != null)
                 overrideStrategyToggle.SetIsOnWithoutNotify(_settings.overrideStrategyEnabled);
