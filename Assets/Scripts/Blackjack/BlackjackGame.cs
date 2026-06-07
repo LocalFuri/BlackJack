@@ -1318,7 +1318,6 @@ namespace Blackjack
                 {
                     // In a split round, advance to hand 2 (or dealer turn if this is already hand 2).
                     // ResolveRound() handles all accounting via _splitHandDoubledDown.
-                    SetStatus($"Hand {_activeHandIndex + 1} Busted");
                     yield return StartCoroutine(PlayLoseSoundAndWait());
                     yield return StartCoroutine(AdvanceOrDealerTurn());
                     yield break;
@@ -1404,10 +1403,9 @@ namespace Blackjack
 
             if (score > BlackjackValue)
             {
-                
-              string label = _isSplitRound ? $"Hand {_activeHandIndex + 1} busts" : "Bust!";
-              SetStatus($"{label}", LoseColor);
-              yield return StartCoroutine(PlayLoseSoundAndWait());
+                if (!_isSplitRound)
+                    SetStatus("Bust!", LoseColor);
+                yield return StartCoroutine(PlayLoseSoundAndWait());
 
                 if (_isSplitRound)
                 {
