@@ -19,7 +19,6 @@ namespace Blackjack
             Canvas canvas = uiArea != null ? uiArea.GetComponentInParent<Canvas>() : null;
             _cardWorldWidth = WorldCardAreaBootstrap.GetCardWorldWidthFromCanvas(canvas);
 
-            float scale = canvas != null ? canvas.scaleFactor : 1f;
             float ppu = 100f;
             CanvasScaler scaler = canvas != null ? canvas.GetComponent<CanvasScaler>() : null;
             if (scaler != null)
@@ -30,7 +29,9 @@ namespace Blackjack
             if (layoutGroup != null)
                 uiSpacingPx = layoutGroup.spacing;
 
-            cardSpacing = _cardWorldWidth + uiSpacingPx / ppu * scale;
+            // Spacing stays in world units — no scaleFactor, matching the resolution-independent
+            // card width derived from the Screen Space - Camera canvas.
+            cardSpacing = _cardWorldWidth + uiSpacingPx / ppu;
         }
 
         public void RefreshLayout()

@@ -99,13 +99,14 @@ namespace Blackjack
             if (canvas == null)
                 return ReferenceCardWidthPx / 100f;
 
-            float scale = canvas.scaleFactor;
             float ppu = 100f;
             CanvasScaler scaler = canvas.GetComponent<CanvasScaler>();
             if (scaler != null)
                 ppu = Mathf.Max(1f, scaler.referencePixelsPerUnit);
 
-            return ReferenceCardWidthPx / ppu * scale;
+            // Screen Space - Camera canvas world size is resolution-independent,
+            // so card world width must not scale with canvas.scaleFactor.
+            return ReferenceCardWidthPx / ppu;
         }
 
         private static Transform GetWorldRoot(Canvas canvas)

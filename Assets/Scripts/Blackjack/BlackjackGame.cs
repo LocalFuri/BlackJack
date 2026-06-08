@@ -1096,6 +1096,7 @@ namespace Blackjack
             SetStatus("");
             _doubleDownExtraBet = 0;
             yield return new WaitForSeconds(newRoundPause); //mark1
+            yield return new WaitUntil(() => !IsMenuOpen); // Pause before the first card is dealt
             //SetStatus("Dealing...");
 
             yield return StartCoroutine(DealCardTo(_playerHand, _playerCardViews, playerCardArea, faceUp: true));
@@ -1455,6 +1456,7 @@ namespace Blackjack
             SetButtonState(dealEnabled: false, actionEnabled: false, splitEnabled: false);
             StopAllScorePulses();
 
+            yield return new WaitUntil(() => !IsMenuOpen); // Pause before hole card reveal
             yield return StartCoroutine(RevealHoleCard());
             UpdateScoreLabels(revealDealer: true);
 
@@ -1480,6 +1482,7 @@ namespace Blackjack
                 {
                     yield return StartCoroutine(DealCardTo(_dealerHand, _dealerCardViews, dealerCardArea, faceUp: true));
                     UpdateScoreLabels(revealDealer: true);
+                    yield return new WaitUntil(() => !IsMenuOpen); // Pause between dealer hits
                     yield return new WaitForSeconds(dealerPauseDelay);
                 }
             }
@@ -2111,6 +2114,8 @@ namespace Blackjack
         private IEnumerator DealCardTo(
             Hand hand, List<ICardDisplay> views, Transform area, bool faceUp)
         {
+            // Pause all card dealing (initial deal and dealer hits) while the menu is open.
+            yield return new WaitUntil(() => !IsMenuOpen);
             yield return new WaitForSeconds(dealDelay);
 
             CardData card = _deck.Draw();

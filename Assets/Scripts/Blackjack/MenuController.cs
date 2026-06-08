@@ -761,17 +761,10 @@ namespace Blackjack
         /// <summary>Returns the Rank integer (2–14) selected by the test-split slider.</summary>
         public int TestSplitRank => _settings.testSplitRank;
 
-        /// <summary>Shows or hides the menu panel.</summary>
+        /// <summary>Shows or hides the menu panel. Opens in any game state; coroutine-driven gameplay pauses via WaitUntil checks.</summary>
         private void ToggleMenu()
         {
             if (menuPanel == null) return;
-
-            // Allow opening during autoplay so the player can adjust settings mid-run.
-            bool inAutoPlay = blackjackGame != null && blackjackGame.IsAutoPlayEnabled;
-
-            // Only allow opening when no round is in progress (unless autoplay is running).
-            if (!_menuVisible && !inAutoPlay && blackjackGame != null && !blackjackGame.IsBettingAllowed && !blackjackGame.IsRoundOver)
-                return;
 
             if (_menuVisible)
                 CloseMenuInternal(playSound: true);
