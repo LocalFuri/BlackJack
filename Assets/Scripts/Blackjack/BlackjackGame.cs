@@ -996,15 +996,16 @@ namespace Blackjack
         {
             _autoPlayEnabled = enabled;
             SetStatus(_autoPlayEnabled ? "Auto-play ON" : "Auto-play OFF");
-            if (!enabled)
-                Time.timeScale = 1f;
+            Time.timeScale = (_autoPlayEnabled && _autoplayMaxSpeed) ? MaxAutoplayTimeScale : 1f;
         }
 
         private const float MaxAutoplayTimeScale = 8f;
+        private bool _autoplayMaxSpeed;
 
-        /// <summary>Scales Time.timeScale to run autoplay at maximum speed when enabled.</summary>
+        /// <summary>Stores the max-speed flag and applies Time.timeScale immediately when autoplay is active.</summary>
         public void SetAutoplayMaxSpeed(bool enabled)
         {
+            _autoplayMaxSpeed = enabled;
             Time.timeScale = (enabled && _autoPlayEnabled) ? MaxAutoplayTimeScale : 1f;
         }
 
