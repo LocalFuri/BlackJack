@@ -31,6 +31,7 @@ namespace Blackjack
 
         [Header("Checkboxes")]
         [SerializeField] private Toggle autoplayToggle;
+        [SerializeField] private Toggle autoplayMaxSpeedToggle;
         [SerializeField] private Toggle blackjackTestToggle;
         [SerializeField] private Toggle bjAllToggle;
         [SerializeField] private Toggle ddTestToggle;
@@ -100,6 +101,7 @@ namespace Blackjack
                 UiOverlaySorting.Apply(menuPanel, UiOverlaySorting.Menu);
             }
 
+            EnsureAutoplayMaxSpeedRow();
             BindRowToggleReferences();
             EnsureToggleRowPlacement();
             EnsureTestMenuRowOrder();
@@ -115,6 +117,7 @@ namespace Blackjack
 
             // Register callbacks after applying so initial apply does not trigger saves.
             autoplayToggle?.onValueChanged.AddListener(OnAutoplayToggled);
+            autoplayMaxSpeedToggle?.onValueChanged.AddListener(OnAutoplayMaxSpeedToggled);
             blackjackTestToggle?.onValueChanged.AddListener(OnBlackjackTestToggled);
             bjAllToggle?.onValueChanged.AddListener(OnBjAllToggled);
             ddTestToggle?.onValueChanged.AddListener(OnDdTestToggled);
@@ -130,7 +133,7 @@ namespace Blackjack
             testSplitRankSlider?.onValueChanged.AddListener(OnTestSplitRankChanged);
 
             // Play toggle sound whenever any checkbox is turned on.
-            foreach (var toggle in new[] { autoplayToggle, blackjackTestToggle, bjAllToggle, ddTestToggle,
+            foreach (var toggle in new[] { autoplayToggle, autoplayMaxSpeedToggle, blackjackTestToggle, bjAllToggle, ddTestToggle,
                                            testSplitToggle, dealerBjTestToggle, overrideStrategyToggle,
                                            alwaysLoseToggle, showStrategyToggle,
                                            martingaleActiveToggle, martingaleAutoPlayToggle })
@@ -189,6 +192,7 @@ namespace Blackjack
         private void BindRowToggleReferences()
         {
             autoplayToggle        ??= FindMenuToggle("AutoplayToggle");
+            autoplayMaxSpeedToggle ??= FindMenuToggle("AutoplayMaxSpeedToggle");
             dealerBjTestToggle    ??= FindMenuToggle("DealerBJTestToggle");
             blackjackTestToggle   ??= FindMenuToggle("BlackjackTestToggle");
             bjAllToggle           ??= FindMenuToggle("BJAllToggle");
@@ -236,6 +240,7 @@ namespace Blackjack
         private void EnsureToggleRowPlacement()
         {
             ReparentToggleToRow("AutoplayToggle", "AutoplayRow");
+            ReparentToggleToRow("AutoplayMaxSpeedToggle", "AutoplayMaxSpeedRow");
             ReparentToggleToRow("DealerBJTestToggle", "DealerBJRow");
             ReparentToggleToRow("BlackjackTestToggle", "BJTestRow");
             ReparentToggleToRow("BJAllToggle", "BJAllRow");
@@ -259,6 +264,7 @@ namespace Blackjack
             foreach (string rowName in new[]
                      {
                          "AutoplayRow",
+                         "AutoplayMaxSpeedRow",
                          "DealerBJRow",
                          "BJTestRow",
                          "BJAllRow",
@@ -269,6 +275,53 @@ namespace Blackjack
                 Transform row = menuPanel.transform.Find(rowName);
                 if (row != null)
                     row.SetSiblingIndex(index++);
+            }
+        }
+
+        /// <summary>
+        /// Clones AutoplayRow to create AutoplayMaxSpeedRow directly below it if it does not already exist.
+        /// This keeps the row visually consistent without requiring scene edits.
+        /// </summary>
+        private void EnsureAutoplayMaxSpeedRow()
+        {
+            if (menuPanel == null) return;
+
+            Transform autoplayRow = menuPanel.transform.Find("AutoplayRow");
+            if (autoplayRow == null) return;
+
+            const string rowName   = "AutoplayMaxSpeedRow";
+            const string labelText = "Autoplay at max speed";
+
+            Transform existing = menuPanel.transform.Find(rowName);
+            if (existing != null)
+                return; // Already present; EnsureTestMenuRowOrder will position it.
+
+            // Clone AutoplayRow as a template.
+            GameObject newRow = Instantiate(autoplayRow.gameObject, menuPanel.transform);
+            newRow.name = rowName;
+            newRow.transform.SetSiblingIndex(autoplayRow.GetSiblingIndex() + 1);
+
+            // Rename the toggle and clear any cloned persistent listeners.
+            Transform toggleTf = newRow.transform.Find("AutoplayToggle");
+            if (toggleTf != null)
+            {
+                toggleTf.name = "AutoplayMaxSpeedToggle";
+                Toggle t = toggleTf.GetComponent<Toggle>();
+                if (t != null)
+                {
+                    t.isOn = false;
+                    t.onValueChanged.RemoveAllListeners();
+                }
+            }
+
+            // Rename the label and update its text.
+            Transform labelTf = newRow.transform.Find("AutoplayLabel");
+            if (labelTf != null)
+            {
+                labelTf.name = "AutoplayMaxSpeedLabel";
+                Text txt = labelTf.GetComponent<Text>();
+                if (txt != null)
+                    txt.text = labelText;
             }
         }
 
@@ -442,6 +495,15 @@ namespace Blackjack
 
             if (!value)
                 blackjackGame?.SetAutoplayEnabled(false);
+        }
+
+        /// <summary>Enables or disables autoplay at maximum speed via Time.timeScale.</summary>
+        private void OnAutoplayMaxSpeedToggled(bool value)
+        {
+            if (_suppressToggleCallbacks) return;
+            _settings.autoplayMaxSpeed = value;
+            blackjackGame?.SetAutoplayMaxSpeed(value);
+            _settingsDirty = true;
         }
 
         private void OnBlackjackTestToggled(bool value)
@@ -861,6 +923,10 @@ namespace Blackjack
             if (autoplayToggle != null)
                 autoplayToggle.SetIsOnWithoutNotify(_settings.autoplayEnabled);
             autoplayButton?.SetActive(_settings.autoplayEnabled);
+
+            if (autoplayMaxSpeedToggle != null)
+                autoplayMaxSpeedToggle.SetIsOnWithoutNotify(_settings.autoplayMaxSpeed);
+            blackjackGame?.SetAutoplayMaxSpeed(_settings.autoplayMaxSpeed);
 
             if (dealerBjTestToggle != null)
                 dealerBjTestToggle.SetIsOnWithoutNotify(_settings.dealerBjTestEnabled);

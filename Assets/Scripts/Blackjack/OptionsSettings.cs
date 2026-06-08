@@ -14,6 +14,7 @@ namespace Blackjack
         public bool  ddTestEnabled           = true;
         public bool  testSplitEnabled        = true;
         public bool  autoplayEnabled         = true;
+        public bool  autoplayMaxSpeed        = false;
         public bool  dealerBjTestEnabled     = true;
         public int   testSplitRank           = 2;
         public bool  overrideStrategyEnabled = false;

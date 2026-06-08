@@ -578,6 +578,7 @@ namespace Blackjack
 
         private void OnDestroy()
         {
+            Time.timeScale = 1f;
             if (chipBetting != null)
                 chipBetting.OnBetChanged -= OnBetChangedHandler;
         }
@@ -995,6 +996,16 @@ namespace Blackjack
         {
             _autoPlayEnabled = enabled;
             SetStatus(_autoPlayEnabled ? "Auto-play ON" : "Auto-play OFF");
+            if (!enabled)
+                Time.timeScale = 1f;
+        }
+
+        private const float MaxAutoplayTimeScale = 8f;
+
+        /// <summary>Scales Time.timeScale to run autoplay at maximum speed when enabled.</summary>
+        public void SetAutoplayMaxSpeed(bool enabled)
+        {
+            Time.timeScale = (enabled && _autoPlayEnabled) ? MaxAutoplayTimeScale : 1f;
         }
 
         /// <summary>Enables auto-play when the menu Autoplay option is on at game load.</summary>
