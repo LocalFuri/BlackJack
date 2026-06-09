@@ -27,7 +27,6 @@ namespace Blackjack
         [SerializeField] private GameObject ddTestButton;
         [SerializeField] private GameObject testSplitButton;
         [SerializeField] private GameObject dealerBlackjackTestButton;
-        [SerializeField] private GameObject autoplayButton;
 
         [Header("Checkboxes")]
         [SerializeField] private Toggle autoplayToggle;
@@ -489,12 +488,18 @@ namespace Blackjack
 
         private void OnAutoplayToggled(bool value)
         {
-            autoplayButton?.SetActive(value);
             _settings.autoplayEnabled = value;
             _settingsDirty = true;
 
-            if (!value)
+            if (value)
+            {
+                if (!_menuVisible)
+                    blackjackGame?.StartAutoplayFromMenu();
+            }
+            else
+            {
                 blackjackGame?.SetAutoplayEnabled(false);
+            }
         }
 
         /// <summary>Enables or disables autoplay at maximum speed via Time.timeScale.</summary>
@@ -922,7 +927,6 @@ namespace Blackjack
 
             if (autoplayToggle != null)
                 autoplayToggle.SetIsOnWithoutNotify(_settings.autoplayEnabled);
-            autoplayButton?.SetActive(_settings.autoplayEnabled);
 
             if (autoplayMaxSpeedToggle != null)
                 autoplayMaxSpeedToggle.SetIsOnWithoutNotify(_settings.autoplayMaxSpeed);

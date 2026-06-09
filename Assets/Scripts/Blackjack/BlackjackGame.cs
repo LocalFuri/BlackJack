@@ -1021,16 +1021,6 @@ namespace Blackjack
                 OnDeal();
         }
 
-        /// <summary>Toggles auto-play mode. While active the game follows basic strategy
-        /// (hit/stand/split/double/surrender), respects Martingale menu settings, and auto-deals.</summary>
-        public void OnAutoplay()
-        {
-            SetAutoplayEnabled(!_autoPlayEnabled);
-
-            if (_autoPlayEnabled && (_state == GameState.Idle || _state == GameState.RoundOver))
-                OnDeal();
-        }
-
         /// <summary>True when the Martingale popup should be skipped and Martingale entered automatically.</summary>
         private bool ShouldAutoConfirmMartingalePopup() =>
             menuController != null &&
