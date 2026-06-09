@@ -1193,6 +1193,13 @@ namespace Blackjack
 
             RefreshStrategyHighlight();
 
+            // Auto-split pairs of Eights or Aces — always the correct basic strategy play.
+            if (CanSplit() && IsAutoSplitHand(_playerHand))
+            {
+                ExecuteSplit();
+                yield break;
+            }
+
             if (_autoPlayEnabled)
             {
                 yield return StartCoroutine(RunAutoplayDecision());
@@ -1220,6 +1227,10 @@ namespace Blackjack
             !_isSplitRound
             && _playerHand.Count == 2
             && _playerHand.Cards[0].Rank == _playerHand.Cards[1].Rank;
+
+        /// <summary>Returns true when the pair should always be split automatically (8-8 or A-A).</summary>
+        private static bool IsAutoSplitHand(Hand hand) =>
+            hand.Cards[0].Rank is Rank.Eight or Rank.Ace;
 
         private bool CanSurrender() =>
             ActiveHand.Count == 2 && !_isSplitRound;
