@@ -727,8 +727,8 @@ namespace Blackjack
                     OnHit();
                 else if (dealButton != null && dealButton.gameObject.activeSelf)
                     OnDeal();
-                else if (_fireworksEndTime > Time.time && _state == GameState.RoundOver)
-                    OnDeal(); // Skip fireworks and deal the next round.
+                else if (_state == GameState.RoundOver)
+                    OnDeal(); // Skip any ongoing end-of-round animation and deal the next round.
             }
         }
 
@@ -740,7 +740,6 @@ namespace Blackjack
         public void OnDeal()
         {
             if (IsLimitPulsing) return;
-            if (_dealerNaturalBJPlaying) return;
             if (_state != GameState.Idle && _state != GameState.RoundOver) return;
             StopBlackjackCelebration();
             StartNewRound();
@@ -752,7 +751,7 @@ namespace Blackjack
         /// </summary>
         private void StartNewRound()
         {
-            if (_doubleBJSoundPlaying) return;
+            _doubleBJSoundPlaying = false;
             StopAllCoroutines();
             StopDoubleDownLayout();
             IsLimitPulsing = false;
