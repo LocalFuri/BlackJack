@@ -137,6 +137,7 @@ namespace Blackjack
     private bool _doubleBJSoundPlaying;
     private bool _dealerNaturalBJPlaying;
     private float _fireworksEndTime;
+    private GameObject _fireworksInstance;
         private float _winSoundEndTime;
         private bool _winPresentationComplete;
 
@@ -726,6 +727,8 @@ namespace Blackjack
                     OnHit();
                 else if (dealButton != null && dealButton.gameObject.activeSelf)
                     OnDeal();
+                else if (_fireworksEndTime > Time.time && _state == GameState.RoundOver)
+                    OnDeal(); // Skip fireworks and deal the next round.
             }
         }
 
@@ -2432,6 +2435,13 @@ namespace Blackjack
             _dealerNaturalBJPlaying = false;
             _dealerNaturalBJEndTime = 0f;
 
+            if (_fireworksInstance != null)
+            {
+                Destroy(_fireworksInstance);
+                _fireworksInstance = null;
+            }
+            _fireworksEndTime = 0f;
+
             if (audioSource != null)
                 audioSource.Stop();
 
@@ -2771,9 +2781,9 @@ namespace Blackjack
             {
                 spawnPosition = playerCardArea.position;
             }
-            GameObject fx = Instantiate(fireworksPrefab, spawnPosition, Quaternion.identity);
+            _fireworksInstance = Instantiate(fireworksPrefab, spawnPosition, Quaternion.identity);
             float actualDuration = duration > 0f ? duration : fireworksDuration;
-            Destroy(fx, actualDuration);
+            Destroy(_fireworksInstance, actualDuration);
             _fireworksEndTime = Time.time + actualDuration;
         }
 
