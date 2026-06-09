@@ -25,9 +25,6 @@ namespace Blackjack
         private static readonly StrategyAction[,] HardTable =
         {
             // vs:           2          3          4          5          6          7          8          9         10          A
-            /* H5  */ { SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit    },
-            /* H6  */ { SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit    },
-            /* H7  */ { SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit    },
             /* H8  */ { SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit    },
             /* H9  */ { SA.Hit,    SA.Double, SA.Double, SA.Double, SA.Double, SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit,    SA.Hit    },
             /* H10 */ { SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Double, SA.Hit,    SA.Hit    },
@@ -104,7 +101,7 @@ namespace Blackjack
                 return Resolve(SoftTable[rowIndex, col], canDouble, canSurrender);
             }
 
-            int hardRow = Mathf.Clamp(hand.BestValue(), 5, 21) - 5;
+            int hardRow = Mathf.Clamp(hand.BestValue(), 8, 21) - 8;
             return Resolve(HardTable[hardRow, col], canDouble, canSurrender);
         }
 

@@ -61,6 +61,7 @@ namespace Blackjack
         [SerializeField] private TextMeshProUGUI statusLabel;
         [SerializeField] private TextMeshProUGUI streakLabel;
         [SerializeField] private TextMeshProUGUI martingaleModeLabel;
+        [SerializeField] private TextMeshProUGUI handsDealtLabel;
 
         [Header("Player Info Labels")]
         [Tooltip("Equal vertical gap in pixels between name, money, streak, and Martingale mode labels.")]
@@ -230,6 +231,9 @@ namespace Blackjack
 
         // Running score: +1 per win, -1 per loss, 0 for push or surrender.
         private int _playerScore;
+
+        // Lifetime hands dealt — loaded from settings on Start, saved back on every deal.
+        private int _handsDealt;
 
         // Fallback used only when MenuController is not available. The authoritative value lives on MenuController.defaultMartingaleThreshold.
         private const int DelayedMartingaleThreshold = 1;
@@ -570,6 +574,8 @@ namespace Blackjack
             AlignPlayerInfoLabels();
             SetScoreLabelsVisible(false);
             RefreshStreakLabel();
+            _handsDealt = menuController != null ? menuController.HandsDealt : 0;
+            RefreshHandsDealtLabel();
             SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
             SetStatus("Press Deal to start");
 
@@ -783,6 +789,9 @@ namespace Blackjack
             _playerMoney -= CurrentBet;
             RefreshMoneyLabel();
             _state = GameState.PlayerTurn;
+            _handsDealt++;
+            if (menuController != null) menuController.HandsDealt = _handsDealt;
+            RefreshHandsDealtLabel();
             if (_inMartingaleMode)
                 RefreshMartingaleModeLabel();
             StartCoroutine(DealRound());
@@ -1802,6 +1811,13 @@ namespace Blackjack
             }
 
             RefreshMartingaleModeLabel();
+        }
+
+        /// <summary>Updates the hands-dealt counter label with the current lifetime count.</summary>
+        private void RefreshHandsDealtLabel()
+        {
+            if (handsDealtLabel != null)
+                handsDealtLabel.text = $"Hands: {_handsDealt}";
         }
 
         private void RefreshMartingaleModeLabel()

@@ -830,6 +830,13 @@ namespace Blackjack
         /// <summary>Returns the Rank integer (2–14) selected by the test-split slider.</summary>
         public int TestSplitRank => _settings.testSplitRank;
 
+        /// <summary>Gets or sets the lifetime hands-dealt counter. Persisted through the settings file.</summary>
+        public int HandsDealt
+        {
+            get => _settings.handsDealt;
+            set => _settings.handsDealt = value;
+        }
+
         /// <summary>Shows or hides the menu panel. Opens in any game state; coroutine-driven gameplay pauses via WaitUntil checks.</summary>
         private void ToggleMenu()
         {

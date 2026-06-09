@@ -75,11 +75,8 @@ namespace Blackjack.UI
             ("12", new[]{ Act.H, Act.H, Act.S, Act.S, Act.S, Act.H, Act.H, Act.H, Act.H, Act.H }),
             ("11", new[]{ Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D }),
             ("10", new[]{ Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.D, Act.H, Act.H }),
-            ("9",  new[]{ Act.H, Act.D, Act.D, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
-            ("8",  new[]{ Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H }),
-            ("7",  new[]{ Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H }),
-            ("6",  new[]{ Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H }),
-            ("5 or less", new[]{ Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H }),
+            ("9",        new[]{ Act.H, Act.D, Act.D, Act.D, Act.D, Act.H, Act.H, Act.H, Act.H, Act.H }),
+            ("8 or less", new[]{ Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H, Act.H }),
         };
 
         private static readonly (string label, Act[] cols)[] PairRows =
