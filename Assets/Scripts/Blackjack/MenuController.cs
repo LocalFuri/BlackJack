@@ -105,6 +105,9 @@ namespace Blackjack
             EnsureToggleRowPlacement();
             EnsureTestMenuRowOrder();
 
+            if (strategyTableUI == null)
+                strategyTableUI = FindObjectOfType<StrategyTableUI>();
+
             _settings = new OptionsSettings
             {
                 martingaleThreshold = defaultMartingaleThreshold,
@@ -383,6 +386,7 @@ namespace Blackjack
             bool newValue = !isCurrentlyVisible;
             _settings.showStrategyEnabled = newValue;
             showStrategyToggle?.SetIsOnWithoutNotify(newValue);
+            MartingaleThresholdToggleGate.SyncCheckmark(showStrategyToggle);
             strategyTableUI.SetVisible(newValue);
 
             uiSounds?.toggleSound.Play(audioSource);
@@ -453,6 +457,7 @@ namespace Blackjack
             strategyTableUI.SetVisible(false);
             _settings.showStrategyEnabled = false;
             showStrategyToggle?.SetIsOnWithoutNotify(false);
+            MartingaleThresholdToggleGate.SyncCheckmark(showStrategyToggle);
             blackjackGame?.PlayCloseSound();
             _settingsDirty = true;
         }
@@ -941,7 +946,10 @@ namespace Blackjack
                 blackjackGame.AlwaysLose = _settings.alwaysLoseEnabled;
 
             if (showStrategyToggle != null)
+            {
                 showStrategyToggle.SetIsOnWithoutNotify(_settings.showStrategyEnabled);
+                MartingaleThresholdToggleGate.SyncCheckmark(showStrategyToggle);
+            }
             strategyTableUI?.SetVisible(_settings.showStrategyEnabled);
 
             if (volumeSlider != null)

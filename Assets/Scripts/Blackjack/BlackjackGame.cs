@@ -557,9 +557,6 @@ namespace Blackjack
             if (chipBetting != null)
                 chipBetting.OnBetChanged += OnBetChangedHandler;
 
-            if (strategyTableUI != null)
-                strategyTableUI.gameObject.SetActive(showStrategyTable);
-
             _deck.Build();
             if (statusLabel != null)
                 _defaultStatusColor = statusLabel.color;
