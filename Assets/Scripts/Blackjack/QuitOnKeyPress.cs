@@ -36,6 +36,9 @@ namespace Blackjack
         {
             _isQuitting = true;
 
+            // Persist any unsaved settings before quitting.
+            gameManager?.SaveMenuSettings();
+
             if (gameManager != null)
             {
                 float length = gameManager.PlayExitSound();

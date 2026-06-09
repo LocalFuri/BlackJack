@@ -423,6 +423,7 @@ namespace Blackjack
             if (!IsPointerOverMenuPanel()) return;
 
             SetMenuVisible(true);
+            _settingsDirty = false;
             SyncMartingaleThresholdFromSlider();
             uiSounds?.toggleSound.Play(audioSource);
         }
@@ -473,9 +474,8 @@ namespace Blackjack
 
         private void OnApplicationQuit()
         {
-            // Reset active gameplay modes so the next session starts in a clean neutral state.
-            _settings.martingaleActive        = false;
-            _settings.martingaleAutoPlay      = false;
+            // Reset transient test/debug modes so the next session starts in a clean neutral state.
+            // Martingale preferences (martingaleActive, martingaleAutoPlay) are intentionally kept.
             _settings.alwaysLoseEnabled       = false;
             _settings.overrideStrategyEnabled = false;
             _settings.autoplayEnabled         = false;
@@ -684,6 +684,7 @@ namespace Blackjack
         {
             _settings.martingaleThreshold = ReadMartingaleThresholdFromSlider();
             _lastMartingaleThresholdFromSlider = _settings.martingaleThreshold;
+            _settingsDirty = true;
             ApplyMartingaleThresholdState();
         }
 
@@ -852,17 +853,18 @@ namespace Blackjack
         {
             if (!_menuVisible) return;
 
-            if (_settingsDirty)
-            {
-                PersistSettingsToFile();
-                _settingsDirty = false;
-            }
+            PersistSettingsToFile();
+            _settingsDirty = false;
+
             SetMenuVisible(false);
             if (playSound) blackjackGame?.PlayCloseSound();
 
             if (_settings.autoplayEnabled)
                 blackjackGame?.StartAutoplayFromMenu();
         }
+
+        /// <summary>Immediately flushes the current settings to disk. Called explicitly before the application quits.</summary>
+        public void SaveSettings() => PersistSettingsToFile();
 
         /// <summary>Writes the current settings to <see cref="SaveFilePath"/> as JSON.</summary>
         private void PersistSettingsToFile()

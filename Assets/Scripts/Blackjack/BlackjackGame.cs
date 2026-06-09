@@ -272,6 +272,9 @@ namespace Blackjack
         /// <param name="playSound">When false, suppresses the close sound. Defaults to true.</param>
         public void CloseMenu(bool playSound = true) => menuController?.CloseMenu(playSound);
 
+        /// <summary>Saves all menu settings to disk immediately. Called before the application quits.</summary>
+        public void SaveMenuSettings() => menuController?.SaveSettings();
+
         /// <summary>Inspector-configured default for whether the strategy table starts visible.</summary>
         public bool ShowStrategyTable => showStrategyTable;
 
