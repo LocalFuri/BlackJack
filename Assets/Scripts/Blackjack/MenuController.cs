@@ -416,10 +416,6 @@ namespace Blackjack
 
             if (_menuRectTransform == null) return;
 
-            // Honour the same guard as keyboard open: only allow when betting is idle or round is over.
-            if (blackjackGame != null && !blackjackGame.IsBettingAllowed && !blackjackGame.IsRoundOver)
-                return;
-
             if (!IsPointerOverMenuPanel()) return;
 
             SetMenuVisible(true);

@@ -5182,7 +5182,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'CodeRed Soft: 2026-06-05'
+  m_text: 'CodeRed Soft: 2026-06-09'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -15651,3 +15651,4 @@ SceneRoots:
   - {fileID: 505432071}
   - {fileID: 1877272416}
   - {fileID: 215121739}
+  - {fileID: 7700002}
