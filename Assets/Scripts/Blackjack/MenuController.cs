@@ -74,6 +74,7 @@ namespace Blackjack
         private CanvasGroup     _menuCanvasGroup;
         private RectTransform   _menuRectTransform;
         private bool            _menuVisible;
+        private float           _preFocusVolume = 1f;
 
         /// <summary>Guard flag to prevent re-entrant callback processing when programmatically setting toggle values.</summary>
         private bool _suppressToggleCallbacks;
@@ -170,6 +171,24 @@ namespace Blackjack
             }
 
             SyncMartingaleThresholdIfSliderChanged();
+        }
+
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            if (audioMixer == null) return;
+
+            if (!hasFocus)
+            {
+                // Store current volume and silence the mixer.
+                audioMixer.GetFloat(MasterVolumeParam, out float currentDb);
+                _preFocusVolume = DbToLinear(currentDb);
+                audioMixer.SetFloat(MasterVolumeParam, LinearToDb(0f));
+            }
+            else
+            {
+                // Restore the volume that was set before losing focus.
+                audioMixer.SetFloat(MasterVolumeParam, LinearToDb(_preFocusVolume));
+            }
         }
 
         /// <summary>Sets toggle state and forces the checkmark graphic to match (fixes Unity UI desync).</summary>
@@ -902,8 +921,47 @@ namespace Blackjack
             SetMenuVisible(false);
             if (playSound) blackjackGame?.PlayCloseSound();
 
-            if (_settings.autoplayEnabled)
-                blackjackGame?.StartAutoplayFromMenu();
+            SyncAutoplaySettingsFromToggles();
+            ApplyAutoplaySettingsFromMenu(startIfEnabled: true);
+        }
+
+        /// <summary>Reads autoplay checkbox state from the UI so menu close matches what the player selected.</summary>
+        private void SyncAutoplaySettingsFromToggles()
+        {
+            if (autoplayToggle != null)
+                _settings.autoplayEnabled = autoplayToggle.isOn;
+
+            if (autoplayMaxSpeedToggle != null)
+                _settings.autoplayMaxSpeed = autoplayMaxSpeedToggle.isOn;
+
+            if (_settings.autoplayMaxSpeed)
+                _settings.autoplayEnabled = true;
+        }
+
+        /// <summary>
+        /// Pushes autoplay checkbox state into <see cref="BlackjackGame"/>.
+        /// When <paramref name="startIfEnabled"/> is true and Autoplay is checked, deals the next round.
+        /// </summary>
+        private void ApplyAutoplaySettingsFromMenu(bool startIfEnabled)
+        {
+            if (blackjackGame == null) return;
+
+            blackjackGame.SetAutoplayMaxSpeed(_settings.autoplayMaxSpeed);
+
+            if (!_settings.autoplayEnabled)
+            {
+                blackjackGame.SetAutoplayEnabled(false);
+                return;
+            }
+
+            if (!startIfEnabled)
+            {
+                blackjackGame.SetAutoplayEnabled(true);
+                return;
+            }
+
+            blackjackGame.SetAutoplayEnabled(false);
+            blackjackGame.StartAutoplayFromMenu();
         }
 
         /// <summary>Immediately flushes the current settings to disk. Called explicitly before the application quits.</summary>

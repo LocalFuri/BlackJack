@@ -413,7 +413,8 @@ namespace Blackjack
             StopAllCoroutines();
             _doubleBJSoundPlaying = false;
 
-            menuController?.CloseMenu();
+            ClearBetLimitStatus();
+            SetAutoplayEnabled(false);
 
             StopBlackjackCelebration();
             martingalePopup?.Hide();
@@ -449,6 +450,10 @@ namespace Blackjack
             _inMartingaleMode        = false;
             _pendingMartingaleDouble = false;
             RefreshStreakLabel();
+
+            _handsDealt = 0;
+            if (menuController != null) menuController.HandsDealt = 0;
+            RefreshHandsDealtLabel();
 
             // Restore the Override Strategy option in case Martingale mode was active.
 
@@ -524,6 +529,8 @@ namespace Blackjack
 
         private void Start()
         {
+            Application.runInBackground = true;
+
             GameAudioShutdown.StopAll();
 
             // Ensure the game starts in a fully clean visual and logical state
@@ -1045,12 +1052,9 @@ namespace Blackjack
             Time.timeScale = (enabled && _autoPlayEnabled) ? MaxAutoplayTimeScale : 1f;
         }
 
-        /// <summary>Enables auto-play when the menu Autoplay option is on at game load.</summary>
+        /// <summary>Enables auto-play when the menu Autoplay option is on at game load or menu close.</summary>
         public void StartAutoplayFromMenu()
         {
-            if (_autoPlayEnabled)
-                return;
-
             SetAutoplayEnabled(true);
 
             if (_state == GameState.Idle || _state == GameState.RoundOver)

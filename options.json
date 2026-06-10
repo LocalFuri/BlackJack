@@ -1,11 +1,11 @@
 {
-    "blackjackTestEnabled": true,
-    "bjAllEnabled": true,
-    "ddTestEnabled": true,
-    "testSplitEnabled": true,
+    "blackjackTestEnabled": false,
+    "bjAllEnabled": false,
+    "ddTestEnabled": false,
+    "testSplitEnabled": false,
     "autoplayEnabled": true,
     "autoplayMaxSpeed": false,
-    "dealerBjTestEnabled": true,
+    "dealerBjTestEnabled": false,
     "testSplitRank": 2,
     "overrideStrategyEnabled": false,
     "alwaysLoseEnabled": false,
@@ -14,5 +14,5 @@
     "martingaleActive": true,
     "martingaleAutoPlay": false,
     "showStrategyEnabled": false,
-    "handsDealt": 10
+    "handsDealt": 13
 }
