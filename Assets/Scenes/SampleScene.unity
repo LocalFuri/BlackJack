@@ -3860,9 +3860,6 @@ MonoBehaviour:
   martingalePopup: {fileID: 2063986682}
   fireworksPrefab: {fileID: 3804757815636409525, guid: 9765305b0a63c674daf4cf6e3735878c, type: 3}
   fireworksDuration: 4
-  fireworksSound:
-    clip: {fileID: 8300000, guid: d41e2de435c861f4eb634b7bb08f0492, type: 3}
-    volume: 0
   audioSource: {fileID: 383359001}
   ahdamnitSound:
     clip: {fileID: 0}
@@ -4299,7 +4296,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b61216b184717d742b03224563ebf561, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  uiSounds: {fileID: 11400000, guid: 60decf6ddf43b154c8d0e5781e7d3165, type: 2}
+  femaleSpeechSounds:
+  - clip: {fileID: 8300000, guid: 6820b85b111f4e44eba378a19963c92c, type: 3}
+    volume: 0.46
+  - clip: {fileID: 8300000, guid: 82682d4333e13224996aec1ea7d82cd8, type: 3}
+    volume: 0.5
+  - clip: {fileID: 8300000, guid: b2df86658deffa64dabcc997b6d0110a, type: 3}
+    volume: 0.54
+  - clip: {fileID: 8300000, guid: c28dfa729cb9b0e44a5ad2e46bee805d, type: 3}
+    volume: 0
   mixerGroup: {fileID: 24300002, guid: 685259ded7f36ac449db40d064bcee55, type: 2}
 --- !u!1 &408005099
 GameObject:

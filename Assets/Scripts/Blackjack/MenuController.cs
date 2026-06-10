@@ -494,6 +494,9 @@ namespace Blackjack
             }
             else
             {
+                if (_settings.autoplayMaxSpeed)
+                    SetAutoplayMaxSpeedToggleState(false);
+
                 blackjackGame?.SetAutoplayEnabled(false);
             }
         }
@@ -505,6 +508,44 @@ namespace Blackjack
             _settings.autoplayMaxSpeed = value;
             blackjackGame?.SetAutoplayMaxSpeed(value);
             _settingsDirty = true;
+
+            if (value)
+                EnsureAutoplayEnabledForMaxSpeed();
+        }
+
+        /// <summary>Max-speed autoplay requires the main Autoplay option to be on.</summary>
+        private void EnsureAutoplayEnabledForMaxSpeed()
+        {
+            if (_settings.autoplayEnabled)
+                return;
+
+            SetAutoplayToggleState(true);
+            _settingsDirty = true;
+        }
+
+        private void SetAutoplayToggleState(bool isOn)
+        {
+            _settings.autoplayEnabled = isOn;
+
+            if (autoplayToggle == null)
+                return;
+
+            _suppressToggleCallbacks = true;
+            autoplayToggle.SetIsOnWithoutNotify(isOn);
+            _suppressToggleCallbacks = false;
+        }
+
+        private void SetAutoplayMaxSpeedToggleState(bool isOn)
+        {
+            _settings.autoplayMaxSpeed = isOn;
+            blackjackGame?.SetAutoplayMaxSpeed(isOn);
+
+            if (autoplayMaxSpeedToggle == null)
+                return;
+
+            _suppressToggleCallbacks = true;
+            autoplayMaxSpeedToggle.SetIsOnWithoutNotify(isOn);
+            _suppressToggleCallbacks = false;
         }
 
         private void OnBlackjackTestToggled(bool value)
@@ -946,11 +987,15 @@ namespace Blackjack
                 testSplitToggle.SetIsOnWithoutNotify(_settings.testSplitEnabled);
             testSplitButton?.SetActive(_settings.testSplitEnabled);
 
+            if (autoplayMaxSpeedToggle != null)
+                autoplayMaxSpeedToggle.SetIsOnWithoutNotify(_settings.autoplayMaxSpeed);
+
+            if (_settings.autoplayMaxSpeed)
+                _settings.autoplayEnabled = true;
+
             if (autoplayToggle != null)
                 autoplayToggle.SetIsOnWithoutNotify(_settings.autoplayEnabled);
 
-            if (autoplayMaxSpeedToggle != null)
-                autoplayMaxSpeedToggle.SetIsOnWithoutNotify(_settings.autoplayMaxSpeed);
             blackjackGame?.SetAutoplayMaxSpeed(_settings.autoplayMaxSpeed);
 
             if (dealerBjTestToggle != null)

@@ -3,12 +3,16 @@
     "bjAllEnabled": true,
     "ddTestEnabled": true,
     "testSplitEnabled": true,
+    "autoplayEnabled": true,
+    "autoplayMaxSpeed": false,
+    "dealerBjTestEnabled": true,
     "testSplitRank": 2,
     "overrideStrategyEnabled": false,
     "alwaysLoseEnabled": false,
     "volume": 1.0,
     "martingaleThreshold": 1,
-    "martingaleActive": false,
+    "martingaleActive": true,
     "martingaleAutoPlay": false,
-    "showStrategyEnabled": false
+    "showStrategyEnabled": false,
+    "handsDealt": 10
 }

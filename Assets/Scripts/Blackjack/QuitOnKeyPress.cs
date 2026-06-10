@@ -39,12 +39,15 @@ namespace Blackjack
             // Persist any unsaved settings before quitting.
             gameManager?.SaveMenuSettings();
 
+            GameAudioShutdown.StopAll();
+
             if (gameManager != null)
             {
                 float length = gameManager.PlayExitSound();
                 yield return new WaitForSeconds(length);
             }
 
+            GameAudioShutdown.StopAll();
             Quit();
         }
 

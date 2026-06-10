@@ -524,8 +524,7 @@ namespace Blackjack
 
         private void Start()
         {
-            if (startupSound.HasClip && audioSource != null)
-                startupSound.Play(audioSource);
+            GameAudioShutdown.StopAll();
 
             // Ensure the game starts in a fully clean visual and logical state
             // regardless of how the previous session ended (crash, force-quit, etc.).
@@ -586,12 +585,25 @@ namespace Blackjack
             SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
             SetStatus("Press Deal to start");
 
+            StartCoroutine(FinishSessionStart());
+        }
+
+        /// <summary>Runs after all Start() methods so stray audio from a prior session cannot overlap startup sounds or autoplay.</summary>
+        private IEnumerator FinishSessionStart()
+        {
+            yield return null;
+            GameAudioShutdown.StopAll();
+
+            if (startupSound.HasClip && audioSource != null)
+                startupSound.Play(audioSource);
+
             if (menuController != null && menuController.IsAutoplayMenuEnabled)
                 StartAutoplayFromMenu();
         }
 
         private void OnDestroy()
         {
+            GameAudioShutdown.StopAll();
             Time.timeScale = 1f;
             if (chipBetting != null)
                 chipBetting.OnBetChanged -= OnBetChangedHandler;
@@ -599,6 +611,8 @@ namespace Blackjack
 
         private void OnApplicationQuit()
         {
+            GameAudioShutdown.StopAll();
+
             // Stop all running coroutines so nothing fires after shutdown begins.
             StopAllCoroutines();
             _doubleBJSoundPlaying = false;
@@ -1587,10 +1601,7 @@ namespace Blackjack
                 _                         => 0,                   // Lose — bet already gone
             };
 
-            // For wins the money label is refreshed after the win sound finishes (in PlayWinAndChipRoutine).
-            bool isWin = result == PayoutResult.Win || result == PayoutResult.BlackjackWin;
-            if (!isWin)
-                RefreshMoneyLabel();
+            RefreshMoneyLabel();
         }
 
         private void RefreshMoneyLabel()
@@ -1661,16 +1672,9 @@ namespace Blackjack
             }
             else
             {
-                // Player won — exit Martingale mode and restore the pre-Martingale bet immediately.
+                // Player won — flag Martingale / double-down bet restore for PlayWinAndChipRoutine.
                 if (_inMartingaleMode)
-                {
                     _martingaleWin = true;
-                    ApplyPendingWinBetRestore();
-                }
-                else if (_doubleDownExtraBet > 0)
-                {
-                    ApplyDoubleDownWinBetRestore();
-                }
 
                 _consecutiveLosses       = 0;
                 _totalAmountLost         = 0;
@@ -2799,31 +2803,39 @@ namespace Blackjack
         /// Plays win audio, waits for it to finish, updates money and bet labels, then plays chip sound.
         /// Pass <paramref name="useCelebration"/> for Martingale wins and natural blackjacks.
         /// Pass <paramref name="playResetSound"/> only for Martingale wins.
+        /// Balance is updated in <see cref="ApplyPayout"/>; bet-area restore runs here after the label is shown.
         /// </summary>
         private IEnumerator PlayWinAndChipRoutine(bool useCelebration = false, bool playResetSound = false, bool playChipSound = true)
         {
             _winPresentationComplete = false;
 
-            if (useCelebration)
+            if (!_autoplayMaxSpeed)
             {
-                ApplyBlackjackGlow();
-                float celebrationDuration = PlayNaturalBlackjackSound();
-                SpawnFireworks(celebrationDuration);
-                if (playResetSound)
-                    StartCoroutine(PlayResetSoundAfterDelay(celebrationDuration));
+                if (useCelebration)
+                {
+                    ApplyBlackjackGlow();
+                    float celebrationDuration = PlayNaturalBlackjackSound();
+                    SpawnFireworks(celebrationDuration);
+                    if (playResetSound)
+                        StartCoroutine(PlayResetSoundAfterDelay(celebrationDuration));
 
-                if (celebrationDuration > 0f)
-                    yield return new WaitForSeconds(celebrationDuration);
+                    if (celebrationDuration > 0f)
+                        yield return new WaitForSeconds(celebrationDuration);
+                    else
+                        yield return null;
+                }
                 else
-                    yield return null;
+                {
+                    PlayWinSound();
+                    if (winSound.Length > 0f)
+                        yield return new WaitForSeconds(winSound.Length);
+                    else
+                        yield return null;
+                }
             }
             else
             {
-                PlayWinSound();
-                if (winSound.Length > 0f)
-                    yield return new WaitForSeconds(winSound.Length);
-                else
-                    yield return null;
+                yield return null;
             }
 
             RefreshMoneyLabel();
