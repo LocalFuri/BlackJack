@@ -3860,6 +3860,9 @@ MonoBehaviour:
   martingalePopup: {fileID: 2063986682}
   fireworksPrefab: {fileID: 3804757815636409525, guid: 9765305b0a63c674daf4cf6e3735878c, type: 3}
   fireworksDuration: 4
+  fireworksSound:
+    clip: {fileID: 8300000, guid: d41e2de435c861f4eb634b7bb08f0492, type: 3}
+    volume: 0
   audioSource: {fileID: 383359001}
   ahdamnitSound:
     clip: {fileID: 0}

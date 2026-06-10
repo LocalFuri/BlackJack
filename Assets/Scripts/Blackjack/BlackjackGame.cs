@@ -2856,6 +2856,7 @@ namespace Blackjack
         private void SpawnFireworks(float duration)
         {
             if (fireworksPrefab == null) return;
+            if (_autoplayMaxSpeed) return;
             Vector3 spawnPosition = Vector3.zero;
             if (playerCardArea is RectTransform cardRect)
             {
