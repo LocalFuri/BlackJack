@@ -581,8 +581,7 @@ namespace Blackjack
             AlignPlayerInfoLabels();
             SetScoreLabelsVisible(false);
             RefreshStreakLabel();
-            _handsDealt = 0;
-            if (menuController != null) menuController.HandsDealt = 0;
+            _handsDealt = menuController != null ? menuController.HandsDealt : 0;
             RefreshHandsDealtLabel();
             SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
             SetStatus("Press Deal to start");

@@ -10,14 +10,15 @@ namespace Blackjack
     /// <summary>
     /// Toggles the developer menu panel with F2.
     /// Controls visibility of the three test buttons and the master volume.
-    /// Settings are persisted to <c>settings.json</c> in <c>Application.persistentDataPath</c>.
+    /// Settings are persisted via <see cref="SettingsRepository"/> (<c>options.json</c> next to the
+    /// build executable, with fallback to <c>Application.persistentDataPath</c>).
     /// Inspector defaults are used as the initial values; the JSON file overrides them on load.
     /// </summary>
     [RequireComponent(typeof(AudioSource))]
     public class MenuController : MonoBehaviour
     {
-        private static string SaveFilePath =>
-            Path.Combine(Application.persistentDataPath, "settings.json");
+        private const string LegacySettingsFileName = "settings.json";
+
         [Header("Menu Panel")]
         [SerializeField] private GameObject menuPanel;
 
@@ -390,6 +391,7 @@ namespace Blackjack
             strategyTableUI.SetVisible(newValue);
 
             uiSounds?.toggleSound.Play(audioSource);
+            PersistSettingsToFile();
         }
 
         /// <summary>Right-click over the strategy table area toggles it open or closed.</summary>
@@ -451,6 +453,7 @@ namespace Blackjack
             strategyTableUI.SetVisible(true);
             uiSounds?.toggleSound.Play(audioSource);
             _settingsDirty = true;
+            PersistSettingsToFile();
         }
 
         private void HideStrategyTable()
@@ -461,6 +464,7 @@ namespace Blackjack
             MartingaleThresholdToggleGate.SyncCheckmark(showStrategyToggle);
             blackjackGame?.PlayCloseSound();
             _settingsDirty = true;
+            PersistSettingsToFile();
         }
 
         /// <summary>Plays the toggle click sound whenever any option checkbox changes value.</summary>
@@ -472,16 +476,7 @@ namespace Blackjack
                 blackjackGame.OnAlwaysLoseDisabled -= DisableAlwaysLose;
         }
 
-        private void OnApplicationQuit()
-        {
-            // Reset transient test/debug modes so the next session starts in a clean neutral state.
-            // Martingale preferences (martingaleActive, martingaleAutoPlay) are intentionally kept.
-            _settings.alwaysLoseEnabled       = false;
-            _settings.overrideStrategyEnabled = false;
-            _settings.autoplayEnabled         = false;
-
-            PersistSettingsToFile();
-        }
+        private void OnApplicationQuit() => PersistSettingsToFile();
 
         // ──────────────────────────────────────────────────────────────────────────
         // Toggle callbacks
@@ -873,13 +868,12 @@ namespace Blackjack
         /// <summary>Immediately flushes the current settings to disk. Called explicitly before the application quits.</summary>
         public void SaveSettings() => PersistSettingsToFile();
 
-        /// <summary>Writes the current settings to <see cref="SaveFilePath"/> as JSON.</summary>
+        /// <summary>Writes the current settings to disk via <see cref="SettingsRepository"/>.</summary>
         private void PersistSettingsToFile()
         {
             try
             {
-                string json = JsonUtility.ToJson(_settings, prettyPrint: true);
-                File.WriteAllText(SaveFilePath, json);
+                SettingsRepository.Save(_settings);
             }
             catch (System.Exception e)
             {
@@ -888,21 +882,38 @@ namespace Blackjack
         }
 
         /// <summary>
-        /// Reads <see cref="SaveFilePath"/> and overlays its values onto <see cref="_settings"/>.
+        /// Loads settings from <see cref="SettingsRepository"/>, or migrates legacy
+        /// <c>settings.json</c> from <see cref="Application.persistentDataPath"/>.
         /// Inspector defaults remain for any field absent from the file.
         /// </summary>
         private void LoadSettingsFromFile()
         {
-            if (!File.Exists(SaveFilePath)) return;
+            if (SettingsRepository.Exists())
+            {
+                try
+                {
+                    OptionsSettings loaded = SettingsRepository.Load();
+                    JsonUtility.FromJsonOverwrite(JsonUtility.ToJson(loaded), _settings);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogWarning($"[MenuController] Failed to load settings: {e.Message}");
+                }
+
+                return;
+            }
+
+            string legacyPath = Path.Combine(Application.persistentDataPath, LegacySettingsFileName);
+            if (!File.Exists(legacyPath)) return;
 
             try
             {
-                string json = File.ReadAllText(SaveFilePath);
-                JsonUtility.FromJsonOverwrite(json, _settings);
+                JsonUtility.FromJsonOverwrite(File.ReadAllText(legacyPath), _settings);
+                PersistSettingsToFile();
             }
             catch (System.Exception e)
             {
-                Debug.LogWarning($"[MenuController] Failed to load settings: {e.Message}");
+                Debug.LogWarning($"[MenuController] Failed to load legacy settings: {e.Message}");
             }
         }
 
