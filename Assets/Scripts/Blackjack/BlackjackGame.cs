@@ -141,6 +141,9 @@ namespace Blackjack
     private GameObject _fireworksInstance;
         private float _winSoundEndTime;
         private bool _winPresentationComplete;
+        private bool _deferredWinPayoutPending;
+        private PayoutResult _deferredWinPayoutResult;
+        private int _deferredWinPayoutBet;
 
     private float _dealerNaturalBJEndTime;
 
@@ -448,6 +451,7 @@ namespace Blackjack
         /// </summary>
         public void ResetGame()
         {
+            ClearDeferredWinPayout();
             StopAllCoroutines();
             _doubleBJSoundPlaying = false;
 
@@ -472,6 +476,18 @@ namespace Blackjack
             _initialBet           = 0;
 
             chipBetting?.ClearBetArea();
+
+            int savedInitialBet = menuController != null ? menuController.SavedInitialBet : 0;
+            if (savedInitialBet > 0)
+            {
+                InitialBet = savedInitialBet;
+                ApplySavedInitialBetToBetArea();
+            }
+            else if (chipBetting != null)
+            {
+                chipBetting.ResetToMinimumBet();
+                _initialBet = chipBetting.SmallestChipValue;
+            }
 
             _playerMoney = 0;
             RefreshMoneyLabel();
@@ -809,7 +825,12 @@ namespace Blackjack
                 else if (dealButton != null && dealButton.gameObject.activeSelf)
                     OnDeal();
                 else if (_state == GameState.RoundOver)
+                {
+                    if (_playerWon && !_winPresentationComplete)
+                        return;
+
                     OnDeal(); // Skip any ongoing end-of-round animation and deal the next round.
+                }
             }
         }
 
@@ -821,6 +842,7 @@ namespace Blackjack
         public void OnDeal()
         {
             if (IsLimitPulsing) return;
+            if (_playerWon && !_winPresentationComplete) return;
             if (_state != GameState.Idle && _state != GameState.RoundOver) return;
             StopBlackjackCelebration();
             StartNewRound();
@@ -832,6 +854,8 @@ namespace Blackjack
         /// </summary>
         private void StartNewRound()
         {
+            ApplyDeferredWinPayoutIfPending();
+
             _doubleBJSoundPlaying = false;
             StopAllCoroutines();
             StopDoubleDownLayout();
@@ -901,8 +925,15 @@ namespace Blackjack
 
             if (chipBetting.TotalBet <= 0)
             {
-                chipBetting.PlaceSmallestChip();
-                _initialBet = chipBetting.SmallestChipValue;
+                int targetBet = _initialBet;
+                if (targetBet <= 0 && menuController != null)
+                    targetBet = menuController.SavedInitialBet;
+                if (targetBet <= 0)
+                    targetBet = chipBetting.SmallestChipValue;
+
+                chipBetting.SetBet(targetBet, playSound: false);
+                if (_initialBet <= 0)
+                    _initialBet = targetBet;
             }
         }
 
@@ -1141,8 +1172,7 @@ namespace Blackjack
 
         /// <summary>True when the Martingale popup should be skipped and Martingale entered automatically.</summary>
         private bool ShouldAutoConfirmMartingalePopup() =>
-            menuController != null &&
-            (menuController.IsMartingaleAutoPlay || (_autoPlayEnabled && menuController.IsMartingaleActive));
+            menuController != null && menuController.IsMartingaleAutoPlay;
 
         /// <summary>Executes the basic-strategy recommendation for the active hand during auto-play.</summary>
         private IEnumerator RunAutoplayDecision()
@@ -1213,6 +1243,7 @@ namespace Blackjack
 
             ClearTable();
             _winPresentationComplete = false;
+            ClearDeferredWinPayout();
             SetStatus("");
             _doubleDownExtraBet = 0;
             yield return WaitForGameDelay(newRoundPause); //mark1
@@ -1430,13 +1461,17 @@ namespace Blackjack
             SetButtonState(dealEnabled: false, actionEnabled: false, splitEnabled: false);
             SetStatus("Doubling down");
 
+            int extraBet = _isSplitRound ? CurrentBet / 2 : CurrentBet;
             _savedBetBeforeAction = CurrentBet;
-            _doubleDownExtraBet = CurrentBet;
+            _doubleDownExtraBet = extraBet;
             if (_isSplitRound)
                 _splitHandDoubledDown[_activeHandIndex] = true;
-            _playerMoney -= _doubleDownExtraBet;
+            _playerMoney -= extraBet;
             RefreshMoneyLabel();
-            chipBetting?.DoubleBetChips();
+            if (_isSplitRound)
+                chipBetting?.SetBet(CurrentBet + extraBet, playSound: false);
+            else
+                chipBetting?.DoubleBetChips();
             PlayGameSound(ddSound); //mark dd sound
             yield return WaitForGameDelay(0.5f);
             yield return StartCoroutine(
@@ -1464,13 +1499,13 @@ namespace Blackjack
                 if (IsDealerNaturalBlackjackLoss(_playerHand))
                 {
                     yield return StartCoroutine(
-                        ApplyDealerNaturalBlackjackLossRoutine(CurrentBet + _doubleDownExtraBet));
+                        ApplyDealerNaturalBlackjackLossRoutine(TotalStakedBet));
                     SetStatus("Busted");
                     yield return StartCoroutine(EndRound());
                     yield break;
                 }
 
-                RecordRoundOutcome(true, lostAmount: CurrentBet + _doubleDownExtraBet, scoreDelta: -1, lossCount: 2);
+                RecordRoundOutcome(true, lostAmount: TotalStakedBet, scoreDelta: -1, lossCount: 2);
                 SetStatus($"Busted");
                 yield return StartCoroutine(PlayLoseSoundAndWait());
                 yield return StartCoroutine(EndRound());
@@ -1598,7 +1633,7 @@ namespace Blackjack
             if (IsDealerNaturalBlackjackLoss(_playerHand))
             {
                 yield return StartCoroutine(
-                    ApplyDealerNaturalBlackjackLossRoutine(CurrentBet + _doubleDownExtraBet));
+                    ApplyDealerNaturalBlackjackLossRoutine(TotalStakedBet));
                 yield return StartCoroutine(EndRound());
                 yield break;
             }
@@ -1690,6 +1725,34 @@ namespace Blackjack
             RefreshMoneyLabel();
         }
 
+        private void RegisterDeferredWinPayout(PayoutResult result, int bet)
+        {
+            if (bet <= 0) return;
+
+            _deferredWinPayoutPending = true;
+            _deferredWinPayoutResult  = result;
+            _deferredWinPayoutBet     = bet;
+        }
+
+        private void ClearDeferredWinPayout()
+        {
+            _deferredWinPayoutPending = false;
+            _deferredWinPayoutBet     = 0;
+        }
+
+        /// <summary>
+        /// Applies a natural-blackjack payout that was deferred for presentation.
+        /// Called before the next deal so max-speed auto-play cannot skip the credit.
+        /// </summary>
+        private void ApplyDeferredWinPayoutIfPending()
+        {
+            if (!_deferredWinPayoutPending || _deferredWinPayoutBet <= 0)
+                return;
+
+            ApplyPayout(_deferredWinPayoutResult, _deferredWinPayoutBet);
+            ClearDeferredWinPayout();
+        }
+
         private void RefreshMoneyLabel()
         {
             if (playerMoneyLabel == null) return;
@@ -1697,6 +1760,16 @@ namespace Blackjack
         }
 
         private int CurrentBet => chipBetting != null ? chipBetting.TotalBet : 0;
+
+        /// <summary>Total stake in the bet area — matches the amount deducted from balance this round.</summary>
+        private int TotalStakedBet => CurrentBet;
+
+        /// <summary>Per-hand wager in a split round, accounting for an optional double-down on one hand.</summary>
+        private int GetSplitHandBet(int handIndex)
+        {
+            int baseHandBet = (CurrentBet - _doubleDownExtraBet) / 2;
+            return _splitHandDoubledDown[handIndex] ? baseHandBet + _doubleDownExtraBet : baseHandBet;
+        }
 
         /// <summary>
         /// Records whether the round was a net loss (bust, lose, surrender) or not.
@@ -1712,7 +1785,7 @@ namespace Blackjack
         {
             Debug.Log($"[Martingale] RecordRoundOutcome called: isLoss={isLoss} isPush={isPush} isMartingaleNeutral={isMartingaleNeutral} AlwaysLose={AlwaysLose}");
 
-            _lastRoundBet  = CurrentBet + _doubleDownExtraBet;
+            _lastRoundBet  = CurrentBet;
             _playerScore  += scoreDelta;
 
             // Split rounds where the player's score is unchanged leave the Martingale counter exactly as-is.
@@ -2060,7 +2133,7 @@ namespace Blackjack
                 for (int i = 0; i < hands.Length; i++)
                 {
                     int s = hands[i].BestValue();
-                    int handBet = CurrentBet / 2;
+                    int handBet = GetSplitHandBet(i);
 
           if (s > BlackjackValue)
                     {
@@ -2125,11 +2198,8 @@ namespace Blackjack
             else
             {
                 int p = _playerHand.BestValue();
-                // For losses/pushes the full staked amount (bet area + extra double-down deduction) is at risk.
-                int totalBet = CurrentBet + _doubleDownExtraBet;
-                // For wins, pay out based on what is visible in the bet area only (CurrentBet).
-                // On a double-down CurrentBet already equals twice the original stake.
-                int winBet = CurrentBet;
+                int stakedBet = TotalStakedBet;
+                int winBet = stakedBet;
                 // Capture before RecordRoundOutcome clears _inMartingaleMode.
                 bool isMartingaleWin = _inMartingaleMode;
                 if      (IsNaturalBlackjack(_playerHand)) { StartCoroutine(PlayWinAndChipRoutine(useCelebration: true, playResetSound: isMartingaleWin, deferPayout: true, deferredPayout: PayoutResult.BlackjackWin, deferredBet: winBet)); RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor); }
@@ -2137,9 +2207,9 @@ namespace Blackjack
                 else if (p > dealerScore)               { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin));  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
                 else if (dealerScore > p)
                 {
-                    RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1, lossCount: _doubleDownExtraBet > 0 ? 2 : 1);
+                    RecordRoundOutcome(true, lostAmount: stakedBet, scoreDelta: -1, lossCount: _doubleDownExtraBet > 0 ? 2 : 1);
                     SetStatus($"You lose", LoseColor);
-                    ApplyPayout(PayoutResult.Lose, totalBet);
+                    ApplyPayout(PayoutResult.Lose, stakedBet);
                     yield return StartCoroutine(PlayLoseSoundAndWait());
                 }
                 else
@@ -2147,9 +2217,9 @@ namespace Blackjack
                     if (AlwaysLose)
                     {
                         // Always Lose: treat push as a loss.
-                        RecordRoundOutcome(true, lostAmount: totalBet, scoreDelta: -1, lossCount: _doubleDownExtraBet > 0 ? 2 : 1);
+                        RecordRoundOutcome(true, lostAmount: stakedBet, scoreDelta: -1, lossCount: _doubleDownExtraBet > 0 ? 2 : 1);
                         SetStatus("You lose", LoseColor);
-                        ApplyPayout(PayoutResult.Lose, totalBet);
+                        ApplyPayout(PayoutResult.Lose, stakedBet);
                         yield return StartCoroutine(PlayLoseSoundAndWait());
                     }
                     else
@@ -2157,7 +2227,7 @@ namespace Blackjack
                         PlayTieSound();
                         RecordRoundOutcome(false, scoreDelta: 0, isPush: true);
                         SetStatus("Push", PushColor);
-                        ApplyPayout(PayoutResult.Push, totalBet);
+                        ApplyPayout(PayoutResult.Push, stakedBet);
                     }
                 }
             }
@@ -2544,7 +2614,7 @@ namespace Blackjack
         {
             yield return StartCoroutine(RevealDealerHoleForNaturalBlackjack());
 
-            int totalBet = CurrentBet + _doubleDownExtraBet;
+            int stakedBet = TotalStakedBet;
 
             if (_isSplitRound)
             {
@@ -2552,10 +2622,10 @@ namespace Blackjack
                 int    lostAmount = 0;
                 Hand[] hands     = { _playerHand, _splitHand };
                 string[] labels  = { "Hand 1", "Hand 2" };
-                int handBet = CurrentBet / 2;
 
                 for (int i = 0; i < hands.Length; i++)
                 {
+                    int handBet = GetSplitHandBet(i);
                     if (IsNaturalBlackjack(hands[i]))
                     {
                         results.Add(ColorizeText($"{labels[i]}: Push", PushColor));
@@ -2581,19 +2651,19 @@ namespace Blackjack
             {
                 if (AlwaysLose)
                 {
-                    yield return StartCoroutine(ApplyDealerNaturalBlackjackLossRoutine(totalBet));
+                    yield return StartCoroutine(ApplyDealerNaturalBlackjackLossRoutine(stakedBet));
                 }
                 else
                 {
                     StartCoroutine(PlayDoubleBJSoundRoutine());
                     RecordRoundOutcome(false, scoreDelta: 0, isPush: true);
                     SetStatus("Push", PushColor);
-                    ApplyPayout(PayoutResult.Push, CurrentBet);
+                    ApplyPayout(PayoutResult.Push, stakedBet);
                 }
             }
             else
             {
-                yield return StartCoroutine(ApplyDealerNaturalBlackjackLossRoutine(totalBet));
+                yield return StartCoroutine(ApplyDealerNaturalBlackjackLossRoutine(stakedBet));
             }
 
             yield return StartCoroutine(EndRound());
@@ -2946,6 +3016,12 @@ namespace Blackjack
         {
             _winPresentationComplete = false;
 
+            if (deferPayout && deferredBet > 0)
+                RegisterDeferredWinPayout(deferredPayout, deferredBet);
+
+            if (SkipAutoplayDelays)
+                ApplyDeferredWinPayoutIfPending();
+
             if (!SkipAutoplayDelays)
             {
                 if (useCelebration)
@@ -2976,7 +3052,7 @@ namespace Blackjack
             }
 
             if (deferPayout && deferredBet > 0)
-                ApplyPayout(deferredPayout, deferredBet);
+                ApplyDeferredWinPayoutIfPending();
             else
                 RefreshMoneyLabel();
 

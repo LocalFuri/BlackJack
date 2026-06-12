@@ -1,4 +1,5 @@
 using Blackjack.UI;
+using System.Collections;
 using System.Globalization;
 using System.IO;
 using UnityEngine;
@@ -195,6 +196,14 @@ namespace Blackjack
             if (!Keyboard.current[Key.Tab].wasPressedThisFrame)
                 return;
 
+            InputField input = GetCurrentBetInputField();
+            if (input == null)
+                return;
+
+            // Let Tab finish editing and move on when the field is already active.
+            if (input.isFocused)
+                return;
+
             FocusCurrentBetInputField();
         }
 
@@ -214,7 +223,7 @@ namespace Blackjack
             EventSystem.current?.SetSelectedGameObject(input.gameObject);
             input.Select();
             input.ActivateInputField();
-            input.MoveTextEnd(false);
+            CurrentBetInputClickForwarder.SelectEntireText(input);
         }
 
         private void OnApplicationFocus(bool hasFocus)
@@ -730,7 +739,6 @@ namespace Blackjack
             _suppressCurrentBetInputCallbacks = true;
             input.SetTextWithoutNotify(bet.ToString(CultureInfo.InvariantCulture));
             _suppressCurrentBetInputCallbacks = false;
-            input.MoveTextEnd(false);
         }
 
         private char ValidateCurrentBetInputCharacter(string text, int charIndex, char addedChar)
@@ -1248,7 +1256,25 @@ namespace Blackjack
             }
 
             if (!skipRefresh)
+            {
                 RefreshCurrentBetInputDisplay();
+                ReleaseCurrentBetInputFocus();
+            }
+        }
+
+        /// <summary>Clears edit focus so the next click or Tab fully re-highlights the field.</summary>
+        private void ReleaseCurrentBetInputFocus()
+        {
+            InputField input = GetCurrentBetInputField();
+            if (input == null) return;
+
+            input.DeactivateInputField();
+
+            if (EventSystem.current != null &&
+                EventSystem.current.currentSelectedGameObject == input.gameObject)
+            {
+                EventSystem.current.SetSelectedGameObject(null);
+            }
         }
 
         private void RefreshCurrentBetInputDisplay()
@@ -1370,6 +1396,14 @@ namespace Blackjack
             ApplyInitialBetFromSettings();
             if (playSound)
                 uiSounds?.toggleSound.Play(audioSource);
+
+            StartCoroutine(FocusCurrentBetInputNextFrame());
+        }
+
+        private IEnumerator FocusCurrentBetInputNextFrame()
+        {
+            yield return null;
+            FocusCurrentBetInputField();
         }
 
         /// <summary>Closes the menu panel if it is currently open.</summary>

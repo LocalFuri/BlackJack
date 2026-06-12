@@ -17,6 +17,16 @@ namespace Blackjack
 
         public void Bind(InputField input) => _input = input;
 
+        public static void SelectEntireText(InputField input)
+        {
+            if (input == null) return;
+
+            int length = input.text.Length;
+            input.caretPosition = length;
+            input.selectionAnchorPosition = 0;
+            input.selectionFocusPosition = length;
+        }
+
         private void Awake() => _input ??= GetComponent<InputField>();
 
         public void OnSelect(BaseEventData eventData) => PrepareForEditing();
@@ -30,14 +40,9 @@ namespace Blackjack
             if (_input == null || !_input.isActiveAndEnabled || !_input.interactable)
                 return;
 
-            if (EventSystem.current?.currentSelectedGameObject == _input.gameObject)
-            {
-                PrepareForEditing();
-                return;
-            }
-
             EventSystem.current?.SetSelectedGameObject(_input.gameObject);
             _input.Select();
+            PrepareForEditing();
         }
 
         private void PrepareForEditing()
@@ -47,7 +52,7 @@ namespace Blackjack
 
             OnSelected?.Invoke();
             _input.ActivateInputField();
-            _input.MoveTextEnd(false);
+            SelectEntireText(_input);
         }
     }
 }
