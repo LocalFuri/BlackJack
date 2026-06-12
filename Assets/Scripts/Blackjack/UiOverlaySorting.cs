@@ -21,6 +21,17 @@ namespace Blackjack
             if (canvas == null)
                 canvas = root.AddComponent<Canvas>();
 
+            Canvas parentCanvas = root.transform.parent != null
+                ? root.transform.parent.GetComponentInParent<Canvas>()
+                : null;
+            if (parentCanvas != null && parentCanvas != canvas)
+            {
+                canvas.renderMode = parentCanvas.renderMode;
+                canvas.worldCamera = parentCanvas.worldCamera;
+                canvas.planeDistance = parentCanvas.planeDistance;
+                canvas.sortingLayerID = parentCanvas.sortingLayerID;
+            }
+
             canvas.overrideSorting = true;
             canvas.sortingOrder = sortingOrder;
 

@@ -25,5 +25,6 @@ namespace Blackjack
         public bool  martingaleAutoPlay      = false;
         public bool  showStrategyEnabled     = false;
         public int   handsDealt             = 0;
+        public int   initialBet             = 1;
     }
 }

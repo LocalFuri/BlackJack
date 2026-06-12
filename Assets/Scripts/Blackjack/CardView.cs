@@ -104,6 +104,24 @@ namespace Blackjack
             onComplete?.Invoke();
         }
 
+        public void SetFaceUpImmediate(bool faceUp)
+        {
+            if (_flipCoroutine != null)
+            {
+                StopCoroutine(_flipCoroutine);
+                _flipCoroutine = null;
+            }
+
+            _isFaceUp        = faceUp;
+            cardImage.sprite = faceUp ? _faceSprite : _backSprite;
+            SyncGlowSprite();
+
+            RectTransform rt = GetComponent<RectTransform>();
+            Vector3 origScale = rt.localScale;
+            if (origScale.x == 0f)
+                rt.localScale = Vector3.one;
+        }
+
         public void SetGlow(bool enabled)
         {
             StopGlowPulse();

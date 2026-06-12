@@ -201,6 +201,8 @@ namespace Blackjack
         private readonly bool[] _splitHandDoubledDown = new bool[2];
         private int _savedBetBeforeAction; // bet amount before split/double-down, restored next round
         private int _betBeforeMartingale;  // bet placed before Martingale doubling; restored on a Martingale win
+        private int _initialBet;           // player's chosen base stake (1–1000); restored after a normal win
+        private bool _martingaleDoubledLastPrepare; // skip initial-bet capture after an auto Martingale double
 
         // Snapshot of the dealer's visible upcard taken at the start of the player's turn.
         private CardData _dealerUpcardSnapshot;
@@ -217,6 +219,7 @@ namespace Blackjack
         private bool _martingaleWin;
         private bool _martingaleBetRestored;
         private bool _doubleDownBetRestored;
+        private bool _standardBetRestored;
         private bool _playerWon;
         private bool _martingalePopupShown;
         // True once the player has accepted the Martingale popup. Cleared only on a win. Suppresses the popup while active.
@@ -279,6 +282,41 @@ namespace Blackjack
         /// <param name="playSound">When false, suppresses the close sound. Defaults to true.</param>
         public void CloseMenu(bool playSound = true) => menuController?.CloseMenu(playSound);
 
+        /// <summary>
+        /// Records the player's chosen base stake after a manual chip-tray change.
+        /// Ignored once after an automatic Martingale double in <see cref="PrepareForBetting"/>.
+        /// </summary>
+        public void CapturePlayerInitialBet(int totalBet)
+        {
+            if (_martingaleDoubledLastPrepare)
+            {
+                _martingaleDoubledLastPrepare = false;
+                return;
+            }
+
+            if (totalBet > 0)
+                _initialBet = totalBet;
+        }
+
+        /// <summary>Player's chosen base stake (1–<see cref="BetLimit"/>), restored after wins.</summary>
+        public int InitialBet
+        {
+            get => _initialBet;
+            set => _initialBet = Mathf.Clamp(value, chipBetting != null ? chipBetting.SmallestChipValue : 1, BetLimit);
+        }
+
+        /// <summary>
+        /// Rebuilds the bet area to <see cref="InitialBet"/> when betting is allowed.
+        /// Used when restoring a saved stake from the menu settings file.
+        /// </summary>
+        public void ApplySavedInitialBetToBetArea()
+        {
+            if (chipBetting == null || _initialBet <= 0) return;
+            if (_state != GameState.Idle && _state != GameState.RoundOver) return;
+
+            chipBetting.SetBet(_initialBet, playSound: false);
+        }
+
         /// <summary>Saves all menu settings to disk immediately. Called before the application quits.</summary>
         public void SaveMenuSettings() => menuController?.SaveSettings();
 
@@ -333,7 +371,7 @@ namespace Blackjack
 
             // Play chip sound after OnDeal so that StopBlackjackCelebration's audioSource.Stop()
             // — called inside OnDeal — does not cancel it.
-            chipSound.Play(audioSource);
+            PlayGameSound(chipSound);
         }
 
         private void ShowMartingalePopup()
@@ -431,6 +469,7 @@ namespace Blackjack
             _activeHandIndex      = 0;
             _savedBetBeforeAction = 0;
             _betBeforeMartingale  = 0;
+            _initialBet           = 0;
 
             chipBetting?.ClearBetArea();
 
@@ -445,6 +484,7 @@ namespace Blackjack
             _martingaleWin            = false;
             _martingaleBetRestored    = false;
             _doubleDownBetRestored    = false;
+            _standardBetRestored      = false;
             _playerWon                = false;
             _martingalePopupShown    = false;
             _inMartingaleMode        = false;
@@ -467,7 +507,7 @@ namespace Blackjack
             SetStatus("Press Deal to start");
 
             if (resetSound.HasClip && audioSource != null)
-                resetSound.Play(audioSource);
+                PlayGameSound(resetSound);
         }
 
         /// <summary>Returns true when the menu is open and a round is already in progress — input should be suppressed.</summary>
@@ -493,13 +533,6 @@ namespace Blackjack
             _isSplitRound       = false;
             _activeHandIndex    = 0;
 
-            if (_savedBetBeforeAction > 0 && chipBetting != null
-                && !_martingaleBetRestored && !_doubleDownBetRestored)
-            {
-                chipBetting.RestoreBet(_savedBetBeforeAction);
-                _savedBetBeforeAction = 0;
-            }
-
             // If the player lost while in Martingale mode, double the bet for the next round.
             bool martingaleBetLimitExceeded = false;
             if (_pendingMartingaleDouble && chipBetting != null)
@@ -508,6 +541,7 @@ namespace Blackjack
                     _betBeforeMartingale = chipBetting.TotalBet;
 
                 _pendingMartingaleDouble = false;
+                _martingaleDoubledLastPrepare = true;
                 martingaleBetLimitExceeded = !chipBetting.DoubleBetChips(
                     playSound: true, enforceMaxBet: true, notifyLimitExceeded: false);
             }
@@ -550,6 +584,7 @@ namespace Blackjack
             _activeHandIndex         = 0;
             _savedBetBeforeAction    = 0;
             _betBeforeMartingale     = 0;
+            _initialBet              = 0;
             _doubleDownExtraBet      = 0;
             _splitHandDoubledDown[0] = false;
             _splitHandDoubledDown[1] = false;
@@ -567,6 +602,7 @@ namespace Blackjack
             _martingaleWin           = false;
             _martingaleBetRestored   = false;
             _doubleDownBetRestored   = false;
+            _standardBetRestored     = false;
             _playerWon               = false;
             _martingalePopupShown    = false;
             _inMartingaleMode        = false;
@@ -602,7 +638,7 @@ namespace Blackjack
             GameAudioShutdown.StopAll();
 
             if (startupSound.HasClip && audioSource != null)
-                startupSound.Play(audioSource);
+                PlayGameSound(startupSound);
 
             if (menuController != null && menuController.IsAutoplayMenuEnabled)
                 StartAutoplayFromMenu();
@@ -637,6 +673,7 @@ namespace Blackjack
             _activeHandIndex      = 0;
             _savedBetBeforeAction = 0;
             _betBeforeMartingale  = 0;
+            _initialBet           = 0;
             _doubleDownExtraBet        = 0;
             _splitHandDoubledDown[0]   = false;
             _splitHandDoubledDown[1]   = false;
@@ -654,6 +691,7 @@ namespace Blackjack
             _martingaleWin           = false;
             _martingaleBetRestored   = false;
             _doubleDownBetRestored   = false;
+            _standardBetRestored     = false;
             _playerWon               = false;
             _martingalePopupShown    = false;
             _inMartingaleMode        = false;
@@ -669,17 +707,24 @@ namespace Blackjack
         /// <summary>Plays the exit sound and returns its length in seconds.</summary>
         public float PlayExitSound()
         {
+            if (SkipAutoplayDelays)
+                return exitSound.Length;
+
             exitSound.Play(audioSource);
             return exitSound.Length;
         }
 
         /// <summary>Plays the exit sound without returning a duration. Used by menu close actions.</summary>
-        public void PlayCloseSound() => exitSound.Play(audioSource);
+        public void PlayCloseSound()
+        {
+            if (SkipAutoplayDelays) return;
+            exitSound.Play(audioSource);
+        }
 
         /// <summary>Plays the knock sound.</summary>
         public void PlayKnockSound()
         {
-            knockSound.Play(audioSource);
+            PlayGameSound(knockSound);
         }
 
         /// <summary>
@@ -693,14 +738,14 @@ namespace Blackjack
 
             if (alreadyAtMax)
             {
-                knockSound.Play(audioSource);
+                PlayGameSound(knockSound);
                 SetStatus("Press Deal to start");
                 return;
             }
 
             IsLimitPulsing = true;
             chipBetting?.SetBet(chipBetting.MaxBet);
-            resetSound.Play(audioSource);
+            PlayGameSound(resetSound);
             _limitPulseCoroutine = StartCoroutine(PulseLimitExceeded());
         }
 
@@ -740,9 +785,9 @@ namespace Blackjack
             for (int i = 0; i < LimitPulseCount; i++)
             {
                 SetStatus(BetLimitStatusMessage, LoseColor);
-                yield return new WaitForSeconds(LimitPulseDelay);
+                yield return WaitForGameDelay(LimitPulseDelay);
                 SetStatus(string.Empty, LoseColor);
-                yield return new WaitForSeconds(LimitPulseDelay);
+                yield return WaitForGameDelay(LimitPulseDelay);
             }
 
             SetStatus("Press Deal to start");
@@ -802,11 +847,20 @@ namespace Blackjack
             _martingaleWin         = false;
             _martingaleBetRestored = false;
             _doubleDownBetRestored = false;
+            _standardBetRestored   = false;
             _playerWon             = false;
             dealButton.gameObject.SetActive(false);
             menuController?.CloseMenu();
             _savedBetBeforeAction = 0;
             EnsureMinimumBet();
+
+            if (chipBetting != null)
+            {
+                if (_martingaleDoubledLastPrepare)
+                    _martingaleDoubledLastPrepare = false;
+                else if (_initialBet <= 0 && chipBetting.TotalBet > 0)
+                    _initialBet = chipBetting.TotalBet;
+            }
 
             // Martingale doubling may have hit the bet cap — let the limit pulse finish first.
             if (IsLimitPulsing)
@@ -846,7 +900,10 @@ namespace Blackjack
             }
 
             if (chipBetting.TotalBet <= 0)
+            {
                 chipBetting.PlaceSmallestChip();
+                _initialBet = chipBetting.SmallestChipValue;
+            }
         }
 
         /// <summary>Player draws another card.</summary>
@@ -882,7 +939,7 @@ namespace Blackjack
             yield return StartCoroutine(RevealHoleCard());
             UpdateScoreLabels(revealDealer: true);
 
-            chipSound.Play(audioSource); //mark1 
+            PlayGameSound(chipSound); //mark1 
             RecordRoundOutcome(true, lostAmount: CurrentBet * 0.5m);
             SetStatus("Surrender returns 1/2 of bet", SurrenderColor);
             ApplyPayout(PayoutResult.Surrender, CurrentBet);
@@ -1045,6 +1102,27 @@ namespace Blackjack
         private const float MaxAutoplayTimeScale = 8f;
         private bool _autoplayMaxSpeed;
 
+        /// <summary>When true, timed waits and sound-length waits are skipped during auto-play.</summary>
+        private bool SkipAutoplayDelays => _autoPlayEnabled && _autoplayMaxSpeed;
+
+        /// <summary>Yields for <paramref name="seconds"/> unless max-speed auto-play is active.</summary>
+        private IEnumerator WaitForGameDelay(float seconds)
+        {
+            if (SkipAutoplayDelays || seconds <= 0f)
+                yield break;
+
+            yield return new WaitForSeconds(seconds);
+        }
+
+        /// <summary>Plays a gameplay sound unless max-speed auto-play is active.</summary>
+        private void PlayGameSound(SoundEntry sound)
+        {
+            if (SkipAutoplayDelays || !sound.HasClip || audioSource == null)
+                return;
+
+            sound.Play(audioSource);
+        }
+
         /// <summary>Stores the max-speed flag and applies Time.timeScale immediately when autoplay is active.</summary>
         public void SetAutoplayMaxSpeed(bool enabled)
         {
@@ -1074,7 +1152,7 @@ namespace Blackjack
 
             // Hold if the menu is open — resume once it closes.
             yield return new WaitUntil(() => !IsMenuOpen);
-            yield return new WaitForSeconds(0.4f);
+            yield return WaitForGameDelay(0.4f);
 
             StrategyAction recommendation = BasicStrategyTable.GetRecommendation(
                 ActiveHand,
@@ -1089,8 +1167,8 @@ namespace Blackjack
                     yield return StartCoroutine(PlayerHit());
                     break;
                 case StrategyAction.Stand:
-                    knockSound.Play(audioSource);
-                    yield return new WaitForSeconds(0.25f);
+                    PlayGameSound(knockSound);
+                    yield return WaitForGameDelay(0.25f);
                     yield return StartCoroutine(AdvanceOrDealerTurn());
                     break;
                 case StrategyAction.Double:
@@ -1137,7 +1215,7 @@ namespace Blackjack
             _winPresentationComplete = false;
             SetStatus("");
             _doubleDownExtraBet = 0;
-            yield return new WaitForSeconds(newRoundPause); //mark1
+            yield return WaitForGameDelay(newRoundPause); //mark1
             yield return new WaitUntil(() => !IsMenuOpen); // Pause before the first card is dealt
             //SetStatus("Dealing...");
 
@@ -1196,11 +1274,15 @@ namespace Blackjack
                 {
                     // Capture before RecordRoundOutcome clears _inMartingaleMode.
                     bool isMartingaleNaturalBJ = _inMartingaleMode;
-                    StartCoroutine(PlayWinAndChipRoutine(useCelebration: true, playResetSound: isMartingaleNaturalBJ));
+                    StartCoroutine(PlayWinAndChipRoutine(
+                        useCelebration: true,
+                        playResetSound: isMartingaleNaturalBJ,
+                        deferPayout: true,
+                        deferredPayout: PayoutResult.BlackjackWin,
+                        deferredBet: CurrentBet));
                     RecordRoundOutcome(false, scoreDelta: +1);
                     _playerWon = true;
                     SetStatus(isMartingaleNaturalBJ ? "Won with Martingale" : "You win", WinColor);
-                    ApplyPayout(PayoutResult.BlackjackWin, CurrentBet);
                 }
 
                 yield return StartCoroutine(EndRound());
@@ -1246,15 +1328,15 @@ namespace Blackjack
 
             if (!hasPair && _playerHand.BestValue() <= AutoHitMaxScore)
             {
-                yield return new WaitForSeconds(0.3f);
+                yield return WaitForGameDelay(0.3f);
                 yield return StartCoroutine(AutoHitLoop());
                 yield break;
             }
 
             if (ShouldAutoStand(_playerHand))
             {
-                knockSound.Play(audioSource);
-                yield return new WaitForSeconds(0.3f);
+                PlayGameSound(knockSound);
+                yield return WaitForGameDelay(0.3f);
                 yield return StartCoroutine(DealerTurn());
             }
         }
@@ -1301,10 +1383,10 @@ namespace Blackjack
             _splitHand.AddCard(movedCard);
 
             PlayCardSlideSound();
-            yield return new WaitForSeconds(0.5f);
-            chipSound.Play(audioSource);
+            yield return WaitForGameDelay(0.5f);
+            PlayGameSound(chipSound);
             if (chipSound.Length > 0f)
-                yield return new WaitForSeconds(chipSound.Length);
+                yield return WaitForGameDelay(chipSound.Length);
 
             // Deal second card to each hand
             yield return StartCoroutine(DealCardTo(_playerHand,  _playerCardViews, playerCardArea, faceUp: true));
@@ -1325,15 +1407,15 @@ namespace Blackjack
 
             if (ActiveHand.BestValue() <= AutoHitMaxScore)
             {
-                yield return new WaitForSeconds(0.3f);
+                yield return WaitForGameDelay(0.3f);
                 yield return StartCoroutine(AutoHitLoop());
                 yield break;
             }
 
             if (ShouldAutoStand(ActiveHand))
             {
-                knockSound.Play(audioSource);
-                yield return new WaitForSeconds(0.3f);
+                PlayGameSound(knockSound);
+                yield return WaitForGameDelay(0.3f);
                 yield return StartCoroutine(AdvanceOrDealerTurn());
             }
         }
@@ -1355,8 +1437,8 @@ namespace Blackjack
             _playerMoney -= _doubleDownExtraBet;
             RefreshMoneyLabel();
             chipBetting?.DoubleBetChips();
-            ddSound.Play(audioSource); //mark dd sound
-            yield return new WaitForSeconds(0.5f);
+            PlayGameSound(ddSound); //mark dd sound
+            yield return WaitForGameDelay(0.5f);
             yield return StartCoroutine(
                 DealCardTo(ActiveHand, ActiveViews,
                            _activeHandIndex == 0 ? playerCardArea : splitCardArea,
@@ -1396,7 +1478,7 @@ namespace Blackjack
             }
 
             SetStatus($"Double Down stands at {ActiveHand.BestValue()}");
-            yield return new WaitForSeconds(dealerPauseDelay);
+            yield return WaitForGameDelay(dealerPauseDelay);
             yield return StartCoroutine(AdvanceOrDealerTurn());
         }
 
@@ -1414,13 +1496,13 @@ namespace Blackjack
                     yield return StartCoroutine(RunAutoplayDecision());
                 else if (ActiveHand.BestValue() <= AutoHitMaxScore)
                 {
-                    yield return new WaitForSeconds(0.3f);
+                    yield return WaitForGameDelay(0.3f);
                     yield return StartCoroutine(AutoHitLoop());
                 }
                 else if (ShouldAutoStand(ActiveHand))
                 {
-                    knockSound.Play(audioSource);
-                    yield return new WaitForSeconds(0.3f);
+                    PlayGameSound(knockSound);
+                    yield return WaitForGameDelay(0.3f);
                     yield return StartCoroutine(DealerTurn());
                 }
             }
@@ -1481,15 +1563,15 @@ namespace Blackjack
             if (score == BlackjackValue || ShouldAutoStand(ActiveHand))
             {
                 if (score != BlackjackValue)
-                    knockSound.Play(audioSource);
-                yield return new WaitForSeconds(0.25f);
+                    PlayGameSound(knockSound);
+                yield return WaitForGameDelay(0.25f);
                 yield return StartCoroutine(AdvanceOrDealerTurn());
                 yield break;
             }
 
             if (score <= AutoHitMaxScore)
             {
-                yield return new WaitForSeconds(0.3f);
+                yield return WaitForGameDelay(0.3f);
                 yield return StartCoroutine(PlayerHit());
                 yield break;
             }
@@ -1529,14 +1611,14 @@ namespace Blackjack
             if (!allPlayerHandsBusted)
             {
                 SetStatus("Dealer's turn");
-                yield return new WaitForSeconds(dealerPauseDelay);
+                yield return WaitForGameDelay(dealerPauseDelay);
 
                 while (ShouldDealerHit())
                 {
                     yield return StartCoroutine(DealCardTo(_dealerHand, _dealerCardViews, dealerCardArea, faceUp: true));
                     UpdateScoreLabels(revealDealer: true);
                     yield return new WaitUntil(() => !IsMenuOpen); // Pause between dealer hits
-                    yield return new WaitForSeconds(dealerPauseDelay);
+                    yield return WaitForGameDelay(dealerPauseDelay);
                 }
             }
 
@@ -1669,6 +1751,9 @@ namespace Blackjack
                     // Threshold just reached — arm the popup for EndRound.
                     _martingalePopupShown = true;
                 }
+
+                _savedBetBeforeAction = 0;
+                _doubleDownExtraBet   = 0;
             }
             else if (isPush)
             {
@@ -1679,6 +1764,9 @@ namespace Blackjack
                 // Player won — flag Martingale / double-down bet restore for PlayWinAndChipRoutine.
                 if (_inMartingaleMode)
                     _martingaleWin = true;
+
+                if (_doubleDownExtraBet <= 0)
+                    _savedBetBeforeAction = 0;
 
                 _consecutiveLosses       = 0;
                 _totalAmountLost         = 0;
@@ -1843,7 +1931,7 @@ namespace Blackjack
         private void RefreshHandsDealtLabel()
         {
             if (handsDealtLabel != null)
-                handsDealtLabel.text = $"Hands: {_handsDealt}";
+                handsDealtLabel.text = $"Hands: {_handsDealt.ToString("N0", GermanCulture)}";
         }
 
         private void RefreshMartingaleModeLabel()
@@ -2044,7 +2132,7 @@ namespace Blackjack
                 int winBet = CurrentBet;
                 // Capture before RecordRoundOutcome clears _inMartingaleMode.
                 bool isMartingaleWin = _inMartingaleMode;
-                if      (IsNaturalBlackjack(_playerHand)) { StartCoroutine(PlayWinAndChipRoutine(useCelebration: true, playResetSound: isMartingaleWin));             RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.BlackjackWin, winBet); }
+                if      (IsNaturalBlackjack(_playerHand)) { StartCoroutine(PlayWinAndChipRoutine(useCelebration: true, playResetSound: isMartingaleWin, deferPayout: true, deferredPayout: PayoutResult.BlackjackWin, deferredBet: winBet)); RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor); }
                 else if (dealerBust)                    { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin));  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
                 else if (p > dealerScore)               { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin));  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
                 else if (dealerScore > p)
@@ -2096,10 +2184,11 @@ namespace Blackjack
 
             int targetBet = _betBeforeMartingale > 0
                 ? _betBeforeMartingale
-                : chipBetting.SmallestChipValue;
+                : (_initialBet > 0 ? _initialBet : chipBetting.SmallestChipValue);
 
             chipBetting.SetBet(targetBet, playSound: false);
             chipBetting.SnapshotBet();
+            _initialBet            = targetBet;
             _betBeforeMartingale   = 0;
             _savedBetBeforeAction  = 0;
             _doubleDownExtraBet    = 0;
@@ -2126,19 +2215,48 @@ namespace Blackjack
 
             chipBetting.SetBet(_savedBetBeforeAction, playSound: false);
             chipBetting.SnapshotBet();
+            _initialBet            = _savedBetBeforeAction;
             _savedBetBeforeAction  = 0;
             _doubleDownExtraBet    = 0;
             _doubleDownBetRestored = true;
             return true;
         }
 
-        /// <summary>Tries Martingale restore, then double-down restore. Returns true if either applied.</summary>
+        /// <summary>
+        /// After a normal win, resets the bet area to the player's chosen initial stake.
+        /// Returns true when the bet was restored (or was already restored this round).
+        /// </summary>
+        private bool ApplyStandardWinBetRestore()
+        {
+            if (chipBetting == null)
+                return false;
+
+            if (_standardBetRestored)
+                return true;
+
+            if (!_playerWon)
+                return false;
+
+            int targetBet = _initialBet > 0 ? _initialBet : chipBetting.SmallestChipValue;
+            chipBetting.SetBet(targetBet, playSound: false);
+            chipBetting.SnapshotBet();
+            _initialBet           = targetBet;
+            _savedBetBeforeAction = 0;
+            _doubleDownExtraBet   = 0;
+            _standardBetRestored  = true;
+            return true;
+        }
+
+        /// <summary>Tries Martingale restore, then double-down restore, then the player's initial bet.</summary>
         private bool ApplyWinBetAreaRestore()
         {
             if (ApplyPendingWinBetRestore())
                 return true;
 
-            return ApplyDoubleDownWinBetRestore();
+            if (ApplyDoubleDownWinBetRestore())
+                return true;
+
+            return ApplyStandardWinBetRestore();
         }
 
         private IEnumerator EndRound()
@@ -2147,7 +2265,7 @@ namespace Blackjack
             SetButtonState(dealEnabled: false, actionEnabled: false, splitEnabled: false);
             strategyTableUI?.ClearHighlight();
 
-            yield return new WaitForSeconds(endRoundDelay);
+            yield return WaitForGameDelay(endRoundDelay);
             chipBetting?.ResetMaxBet();
             chipBetting?.ClampBetToMaxBet();
 
@@ -2160,7 +2278,7 @@ namespace Blackjack
 
                 float chipRemaining = _winSoundEndTime - Time.time;
                 if (chipRemaining > 0f)
-                    yield return new WaitForSeconds(chipRemaining);
+                    yield return WaitForGameDelay(chipRemaining);
             }
             else
             {
@@ -2171,11 +2289,11 @@ namespace Blackjack
             // letting the player interact again.
             float remaining = _fireworksEndTime - Time.time;
             if (remaining > 0f)
-                yield return new WaitForSeconds(remaining);
+                yield return WaitForGameDelay(remaining);
 
             remaining = _dealerNaturalBJEndTime - Time.time;
             if (remaining > 0f)
-                yield return new WaitForSeconds(remaining);
+                yield return WaitForGameDelay(remaining);
 
             if (!_doubleBJSoundPlaying && !_dealerNaturalBJPlaying && _state == GameState.RoundOver)
                 SetButtonState(dealEnabled: true, actionEnabled: false, splitEnabled: false);
@@ -2201,7 +2319,7 @@ namespace Blackjack
                     OnDeal();
                 else if (_autoPlayEnabled)
                 {
-                    yield return new WaitForSeconds(0.6f);
+                    yield return WaitForGameDelay(0.6f);
                     yield return new WaitUntil(() => !IsMenuOpen);
                     OnDeal();
                 }
@@ -2218,21 +2336,20 @@ namespace Blackjack
         {
             // Pause all card dealing (initial deal and dealer hits) while the menu is open.
             yield return new WaitUntil(() => !IsMenuOpen);
-            yield return new WaitForSeconds(dealDelay);
+            yield return WaitForGameDelay(dealDelay);
 
             CardData card = _deck.Draw();
 
-            if (dealCardSound.HasClip && audioSource != null)
-                dealCardSound.Play(audioSource);
+            PlayGameSound(dealCardSound);
 
-            ICardDisplay view = SpawnCardView(card, area, faceUp: false);
+            ICardDisplay view = SpawnCardView(card, area, faceUp: SkipAutoplayDelays && faceUp);
             if (view == null)
                 yield break;
 
             hand.AddCard(card);
             views.Add(view);
 
-            if (faceUp)
+            if (faceUp && !SkipAutoplayDelays)
             {
                 bool flipDone = false;
                 view.Flip(toFaceUp: true, () => flipDone = true);
@@ -2361,6 +2478,9 @@ namespace Blackjack
 
         private IEnumerator DealerPeekHoleCardCheck()
         {
+            if (SkipAutoplayDelays)
+                yield break;
+
             if (_dealerHoleCardView == null || _dealerHoleCardView.IsFaceUp)
                 yield break;
       
@@ -2386,6 +2506,12 @@ namespace Blackjack
         {
             if (_dealerHoleCardView == null || _dealerHoleCardView.IsFaceUp)
                 yield break;
+
+            if (SkipAutoplayDelays)
+            {
+                _dealerHoleCardView.SetFaceUpImmediate(true);
+                yield break;
+            }
 
             bool done = false;
             _dealerHoleCardView.Flip(toFaceUp: true, () => done = true);
@@ -2491,7 +2617,7 @@ namespace Blackjack
             SetStatus("You lose", LoseColor);
             ApplyPayout(PayoutResult.Lose, lostAmount);
 
-            yield return new WaitForSeconds(glowDuration);
+            yield return WaitForGameDelay(glowDuration);
             StopBlackjackGlow(_dealerCardViews);
             _dealerNaturalBJPlaying = false;
             _dealerNaturalBJEndTime = 0f;
@@ -2506,7 +2632,7 @@ namespace Blackjack
             float glowDuration = PlayDealerBlackjackLoseSound();
             _dealerNaturalBJEndTime = Time.time + glowDuration;
 
-            yield return new WaitForSeconds(glowDuration);
+            yield return WaitForGameDelay(glowDuration);
             StopBlackjackGlow(_dealerCardViews);
             _dealerNaturalBJPlaying = false;
             _dealerNaturalBJEndTime = 0f;
@@ -2516,6 +2642,9 @@ namespace Blackjack
 
         private void ApplyBlackjackGlow(IReadOnlyList<ICardDisplay> cardViews)
         {
+            if (SkipAutoplayDelays)
+                return;
+
             foreach (ICardDisplay v in cardViews)
                 v?.StartGlowPulse();
         }
@@ -2777,10 +2906,7 @@ namespace Blackjack
         }
 
         /// <summary>Plays the win sound if both clip and source are assigned.</summary>
-        private void PlayWinSound()
-        {
-            winSound.Play(audioSource);
-        }
+        private void PlayWinSound() => PlayGameSound(winSound);
 
         /// <summary>
         /// Plays the win audio and card glow.
@@ -2804,16 +2930,23 @@ namespace Blackjack
         }
 
         /// <summary>
-        /// Plays win audio, waits for it to finish, updates money and bet labels, then plays chip sound.
+        /// Plays win audio, waits for it to finish, then updates balance (immediately or via deferred payout),
+        /// restores the bet area, and plays chip sound.
         /// Pass <paramref name="useCelebration"/> for Martingale wins and natural blackjacks.
         /// Pass <paramref name="playResetSound"/> only for Martingale wins.
-        /// Balance is updated in <see cref="ApplyPayout"/>; bet-area restore runs here after the label is shown.
+        /// When <paramref name="deferPayout"/> is true, <see cref="ApplyPayout"/> runs after celebration audio/fireworks.
         /// </summary>
-        private IEnumerator PlayWinAndChipRoutine(bool useCelebration = false, bool playResetSound = false, bool playChipSound = true)
+        private IEnumerator PlayWinAndChipRoutine(
+            bool useCelebration = false,
+            bool playResetSound = false,
+            bool playChipSound = true,
+            bool deferPayout = false,
+            PayoutResult deferredPayout = PayoutResult.Win,
+            int deferredBet = 0)
         {
             _winPresentationComplete = false;
 
-            if (!_autoplayMaxSpeed)
+            if (!SkipAutoplayDelays)
             {
                 if (useCelebration)
                 {
@@ -2824,7 +2957,7 @@ namespace Blackjack
                         StartCoroutine(PlayResetSoundAfterDelay(celebrationDuration));
 
                     if (celebrationDuration > 0f)
-                        yield return new WaitForSeconds(celebrationDuration);
+                        yield return WaitForGameDelay(celebrationDuration);
                     else
                         yield return null;
                 }
@@ -2832,7 +2965,7 @@ namespace Blackjack
                 {
                     PlayWinSound();
                     if (winSound.Length > 0f)
-                        yield return new WaitForSeconds(winSound.Length);
+                        yield return WaitForGameDelay(winSound.Length);
                     else
                         yield return null;
                 }
@@ -2842,26 +2975,28 @@ namespace Blackjack
                 yield return null;
             }
 
-            RefreshMoneyLabel();
+            if (deferPayout && deferredBet > 0)
+                ApplyPayout(deferredPayout, deferredBet);
+            else
+                RefreshMoneyLabel();
 
-            if (!ApplyWinBetAreaRestore())
-                chipBetting?.RestoreBetFromSnapshot();
+            ApplyWinBetAreaRestore();
 
-            if (playChipSound && chipSound.HasClip && audioSource != null)
-                chipSound.Play(audioSource);
+            if (playChipSound)
+                PlayGameSound(chipSound);
 
-            _winSoundEndTime = Time.time + (playChipSound ? chipSound.Length : 0f);
+            _winSoundEndTime = Time.time + (playChipSound && !SkipAutoplayDelays ? chipSound.Length : 0f);
             _winPresentationComplete = true;
         }
         private IEnumerator PlayResetSoundAfterDelay(float delay)
         {
             // Always yield at least one frame so RecordRoundOutcome can set _martingaleWin before we read it.
             if (delay > 0f)
-                yield return new WaitForSeconds(delay);
+                yield return WaitForGameDelay(delay);
             else
                 yield return null;
 
-            resetSound.Play(audioSource);
+            PlayGameSound(resetSound);
         }
 
         /// <summary>
@@ -2871,7 +3006,7 @@ namespace Blackjack
         private void SpawnFireworks(float duration)
         {
             if (fireworksPrefab == null) return;
-            if (_autoplayMaxSpeed) return;
+            if (SkipAutoplayDelays) return;
             Vector3 spawnPosition = Vector3.zero;
             if (playerCardArea is RectTransform cardRect)
             {
@@ -2898,18 +3033,21 @@ namespace Blackjack
         /// Returns the duration of the longest clip played, so callers can chain additional sounds.</summary>
         private float PlayNaturalBlackjackSound()
         {
+            if (SkipAutoplayDelays)
+                return 0f;
+
             SoundEntry primary = naturalBlackjackSound.HasClip ? naturalBlackjackSound : winSound;
             float longestDuration = 0f;
 
             if (primary.HasClip && audioSource != null)
             {
-                primary.Play(audioSource);
+                PlayGameSound(primary);
                 longestDuration = primary.Length;
             }
 
             if (yuhuSound.HasClip && audioSource != null)
             {
-                yuhuSound.Play(audioSource);
+                PlayGameSound(yuhuSound);
                 if (yuhuSound.Length > longestDuration)
                     longestDuration = yuhuSound.Length;
             }
@@ -2922,40 +3060,39 @@ namespace Blackjack
 
         private IEnumerator StopGlowAfterClip(float duration, IReadOnlyList<ICardDisplay> cardViews)
         {
-            yield return new WaitForSeconds(duration);
+            yield return WaitForGameDelay(duration);
             StopBlackjackGlow(cardViews);
         }
 
     /// <summary>Plays the lose sound if both clip and source are assigned.</summary>
-      private void PlayCardSlideSound()
-        {
-            if (cardSlideSound.HasClip && audioSource != null)
-                cardSlideSound.Play(audioSource);
-        }
+      private void PlayCardSlideSound() => PlayGameSound(cardSlideSound);
 
-        private void PlayLoseSound()
-        {
-            loseSound.Play(audioSource);
-        }
+        private void PlayLoseSound() => PlayGameSound(loseSound);
 
         /// <summary>Plays the lose sound and waits for it to finish before returning.</summary>
         private IEnumerator PlayLoseSoundAndWait()
         {
-            loseSound.Play(audioSource);
+            if (SkipAutoplayDelays)
+                yield break;
+
+            PlayGameSound(loseSound);
             if (loseSound.HasClip)
-                yield return new WaitForSeconds(loseSound.Length);
+                yield return WaitForGameDelay(loseSound.Length);
         }
 
         /// <summary>Plays lose and damnit sounds when the dealer has a natural blackjack.</summary>
         private float PlayDealerBlackjackLoseSound()
         {
+            if (SkipAutoplayDelays)
+                return 0f;
+
             PlayLoseSound();
 
             float longestDuration = loseSound.HasClip ? loseSound.Length : 0f;
 
             if (damnitSound.HasClip && audioSource != null)
             {
-                damnitSound.Play(audioSource);
+                PlayGameSound(damnitSound);
                 if (damnitSound.Length > longestDuration)
                     longestDuration = damnitSound.Length;
             }
@@ -2964,10 +3101,7 @@ namespace Blackjack
         }
 
         /// <summary>Plays the tie sound if both clip and source are assigned.</summary>
-        private void PlayTieSound()
-        {
-            tieSound.Play(audioSource);
-        }
+        private void PlayTieSound() => PlayGameSound(tieSound);
 
         /// <summary>
         /// Triggered on a double natural blackjack push. Plays the tie sound once,
@@ -2979,8 +3113,14 @@ namespace Blackjack
         {
             _doubleBJSoundPlaying = true;
 
-            tieSound.Play(audioSource);
-            yield return new WaitForSeconds(tieSound.Length);
+            if (SkipAutoplayDelays)
+            {
+                _doubleBJSoundPlaying = false;
+                yield break;
+            }
+
+            PlayGameSound(tieSound);
+            yield return WaitForGameDelay(tieSound.Length);
 
             List<SoundEntry> pool = new List<SoundEntry>();
             if (cheaterSound.HasClip) pool.Add(cheaterSound);
@@ -3001,8 +3141,8 @@ namespace Blackjack
             SoundEntry chosen = pool[UnityEngine.Random.Range(0, pool.Count)];
             _lastDoubleBJSound = chosen;
 
-            chosen.Play(audioSource);
-            yield return new WaitForSeconds(chosen.Length);
+            PlayGameSound(chosen);
+            yield return WaitForGameDelay(chosen.Length);
             _doubleBJSoundPlaying = false;
 
             if (_state == GameState.RoundOver)

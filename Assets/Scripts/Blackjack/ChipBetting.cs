@@ -483,6 +483,8 @@ namespace Blackjack
             int delta = TotalBet - previousBet;
             if (delta != 0)
                 OnBetChanged?.Invoke(delta);
+
+            blackjackGame?.CapturePlayerInitialBet(TotalBet);
         }
 
         /// <summary>Returns true when the current total bet exceeds the minimum (one chip of the lowest denomination).</summary>
@@ -527,6 +529,7 @@ namespace Blackjack
             CheckUpgrade(typeIndex);
             OnBetChanged?.Invoke(chipValue);
             RefreshBetLabel();
+            blackjackGame?.CapturePlayerInitialBet(TotalBet);
         }
 
         private void OnChipRightClicked(int typeIndex)
@@ -562,6 +565,7 @@ namespace Blackjack
             RemoveTopChips(typeIndex, 1);
             OnBetChanged?.Invoke(-chipValue);
             RefreshBetLabel();
+            blackjackGame?.CapturePlayerInitialBet(TotalBet);
         }
 
         /// <summary>Destroys every chip in the bet area and clears placement tracking.</summary>
