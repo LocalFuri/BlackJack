@@ -1390,10 +1390,8 @@ namespace Blackjack
             _settingsDirty = false;
             SetMenuVisible(true);
             SyncMartingaleThresholdFromSlider();
-            SyncInitialBetFromGame();
-            RefreshCurrentBetInputDisplay();
-            PersistSettingsToFile();
             ApplyInitialBetFromSettings();
+            RefreshCurrentBetInputDisplay();
             if (playSound)
                 uiSounds?.toggleSound.Play(audioSource);
 
@@ -1423,18 +1421,7 @@ namespace Blackjack
             ApplyAutoplaySettingsFromMenu(startIfEnabled: true);
         }
 
-        /// <summary>Copies the game's current initial bet into <see cref="OptionsSettings"/> when it is set.</summary>
-        private void SyncInitialBetFromGame()
-        {
-            if (blackjackGame == null) return;
-
-            int bet = blackjackGame.InitialBet;
-            if (bet <= 0) return;
-
-            SavedInitialBet = bet;
-        }
-
-        /// <summary>Restores the saved initial bet from settings into the game and bet area when allowed.</summary>
+        /// <summary>Restores the saved Current Bet from settings into the game and bet area when allowed.</summary>
         private void ApplyInitialBetFromSettings()
         {
             if (blackjackGame == null || _settings.initialBet <= 0) return;
@@ -1496,8 +1483,6 @@ namespace Blackjack
 
             if (_menuVisible)
                 ApplyCurrentBetFromInputField(skipRefresh: true);
-            else
-                SyncInitialBetFromGame();
 
             SyncMartingaleThresholdFromSlider();
             SyncAutoplaySettingsFromToggles();
