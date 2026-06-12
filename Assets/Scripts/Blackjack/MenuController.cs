@@ -1,7 +1,9 @@
 using Blackjack.UI;
+using System.Globalization;
 using System.IO;
 using UnityEngine;
 using UnityEngine.Audio;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
@@ -126,6 +128,8 @@ namespace Blackjack
             LoadSettingsFromFile();
             ApplySettings();
 
+            Application.quitting += HandleApplicationQuitting;
+
             // Register callbacks after applying so initial apply does not trigger saves.
             autoplayToggle?.onValueChanged.AddListener(OnAutoplayToggled);
             autoplayMaxSpeedToggle?.onValueChanged.AddListener(OnAutoplayMaxSpeedToggled);
@@ -180,6 +184,37 @@ namespace Blackjack
             }
 
             SyncMartingaleThresholdIfSliderChanged();
+            HandleCurrentBetInputTabFocus();
+        }
+
+        private void HandleCurrentBetInputTabFocus()
+        {
+            if (!_menuVisible || Keyboard.current == null)
+                return;
+
+            if (!Keyboard.current[Key.Tab].wasPressedThisFrame)
+                return;
+
+            FocusCurrentBetInputField();
+        }
+
+        private void FocusCurrentBetInputField()
+        {
+            InputField input = GetCurrentBetInputField();
+            if (input == null || !input.interactable)
+                return;
+
+            CurrentBetInputClickForwarder forwarder = input.GetComponent<CurrentBetInputClickForwarder>();
+            if (forwarder != null)
+            {
+                forwarder.FocusInput();
+                return;
+            }
+
+            EventSystem.current?.SetSelectedGameObject(input.gameObject);
+            input.Select();
+            input.ActivateInputField();
+            input.MoveTextEnd(false);
         }
 
         private void OnApplicationFocus(bool hasFocus)
@@ -450,34 +485,32 @@ namespace Blackjack
 
             inputGo.transform.SetParent(parent, false);
 
+            Font fieldFont = GetCurrentBetInputFont(font);
+            float inputWidth = MeasureCurrentBetInputWidth(font);
             RectTransform inputRect = inputGo.GetComponent<RectTransform>();
-            inputRect.sizeDelta = new Vector2(120f, 28f);
-
-            Font fieldFont = font != null
-                ? font
-                : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            inputRect.sizeDelta = new Vector2(inputWidth, 28f);
 
             Image background = inputGo.GetComponent<Image>();
-            background.color = new Color(0.95f, 0.95f, 0.95f, 1f);
-            background.raycastTarget = true;
+            ApplyCurrentBetInputBackground(background);
 
-            Text text = CreateBetInputTextChild(inputGo.transform, "Text", fieldFont, string.Empty, Color.black);
+            Text text = CreateBetInputTextChild(inputGo.transform, "Text", fieldFont, string.Empty, CurrentBetInputTextColor);
             text.alignment = TextAnchor.MiddleRight;
             Text placeholder = CreateBetInputTextChild(
                 inputGo.transform,
                 "Placeholder",
                 fieldFont,
-                "1",
-                new Color(0.4f, 0.4f, 0.4f, 0.75f));
+                FormatCurrentBetGerman(1),
+                CurrentBetInputPlaceholderColor);
             placeholder.alignment = TextAnchor.MiddleRight;
 
             InputField input = inputGo.GetComponent<InputField>();
             input.targetGraphic = background;
             input.textComponent = text;
             input.placeholder = placeholder;
-            input.contentType = InputField.ContentType.IntegerNumber;
-            input.characterLimit = 4;
+            input.contentType = InputField.ContentType.Standard;
+            input.characterLimit = FormatCurrentBetGerman(BlackjackGame.BetLimit).Length;
             input.lineType = InputField.LineType.SingleLine;
+            ApplyCurrentBetInputColors(input);
 
             return input;
         }
@@ -495,12 +528,11 @@ namespace Blackjack
             RectTransform textRect = textGo.GetComponent<RectTransform>();
             textRect.anchorMin = Vector2.zero;
             textRect.anchorMax = Vector2.one;
-            textRect.offsetMin = new Vector2(8f, 2f);
-            textRect.offsetMax = new Vector2(-8f, -2f);
+            textRect.offsetMin = new Vector2(CurrentBetInputHorizontalPadding, 2f);
+            textRect.offsetMax = new Vector2(-CurrentBetInputHorizontalPadding, -2f);
 
             Text text = textGo.GetComponent<Text>();
-            text.font = font;
-            text.fontSize = 18;
+            ApplyCurrentBetInputTypography(text, font);
             text.text = value;
             text.color = color;
             text.supportRichText = false;
@@ -508,41 +540,67 @@ namespace Blackjack
             return text;
         }
 
+        private static void ApplyCurrentBetInputColors(InputField input)
+        {
+            input.selectionColor = CurrentBetInputSelectionColor;
+            input.customCaretColor = true;
+            input.caretColor = Color.black;
+
+            ColorBlock colors = input.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = Color.white;
+            colors.pressedColor = Color.white;
+            colors.selectedColor = Color.white;
+            colors.disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+            input.colors = colors;
+
+            if (input.textComponent != null)
+                input.textComponent.color = CurrentBetInputTextColor;
+
+            if (input.placeholder is Text placeholder)
+                placeholder.color = CurrentBetInputPlaceholderColor;
+
+            if (input.targetGraphic is Image background)
+                ApplyCurrentBetInputBackground(background);
+        }
+
+        private static void ApplyCurrentBetInputBackground(Image background)
+        {
+            background.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/UISprite.psd");
+            background.type = Image.Type.Sliced;
+            background.color = CurrentBetInputBackgroundColor;
+            background.raycastTarget = true;
+        }
+
         private static void ApplyCurrentBetInputFieldStyle(InputField input, Text labelReference)
         {
             if (input == null) return;
 
             input.interactable = true;
-            input.selectionColor = new Color(0.2f, 0.45f, 0.85f, 0.35f);
 
             Font menuFont = labelReference != null ? labelReference.font : null;
 
             if (input.textComponent != null)
             {
-                if (menuFont != null)
-                    input.textComponent.font = menuFont;
-                input.textComponent.fontSize = 18;
-                input.textComponent.color = new Color(0.1f, 0.1f, 0.1f, 1f);
+                ApplyCurrentBetInputTypography(input.textComponent, menuFont);
                 input.textComponent.alignment = TextAnchor.MiddleRight;
                 input.textComponent.raycastTarget = false;
             }
 
             if (input.placeholder is Text placeholder)
             {
-                if (menuFont != null)
-                    placeholder.font = menuFont;
-                placeholder.text = "1";
-                placeholder.fontSize = 18;
-                placeholder.color = new Color(0.4f, 0.4f, 0.4f, 0.75f);
+                ApplyCurrentBetInputTypography(placeholder, menuFont);
+                placeholder.text = FormatCurrentBetGerman(1);
                 placeholder.alignment = TextAnchor.MiddleRight;
                 placeholder.raycastTarget = false;
             }
 
-            if (input.targetGraphic is Image background)
-            {
-                background.color = new Color(0.95f, 0.95f, 0.95f, 1f);
-                background.raycastTarget = true;
-            }
+            ApplyCurrentBetInputColors(input);
+
+            float inputWidth = MeasureCurrentBetInputWidth(menuFont);
+            RectTransform inputRect = input.GetComponent<RectTransform>();
+            if (inputRect != null)
+                inputRect.sizeDelta = new Vector2(inputWidth, 28f);
 
             foreach (var graphic in input.GetComponentsInChildren<Graphic>(true))
             {
@@ -553,9 +611,9 @@ namespace Blackjack
             LayoutElement layout = input.GetComponent<LayoutElement>();
             if (layout == null)
                 layout = input.gameObject.AddComponent<LayoutElement>();
-            layout.preferredWidth = 120f;
+            layout.preferredWidth = inputWidth;
             layout.preferredHeight = 28f;
-            layout.minWidth = 80f;
+            layout.minWidth = inputWidth;
             layout.minHeight = 28f;
 
             CurrentBetInputClickForwarder forwarder = input.GetComponent<CurrentBetInputClickForwarder>();
@@ -567,35 +625,130 @@ namespace Blackjack
                 labelReference.raycastTarget = false;
         }
 
+        private const int CurrentBetInputFontSize = 18;
+        private const FontStyle CurrentBetInputFontStyle = FontStyle.Bold;
+        private const float CurrentBetInputHorizontalPadding = 4f;
+        private static readonly Color CurrentBetInputBackgroundColor = new Color(0.95f, 0.95f, 0.95f, 1f);
+        private static readonly Color CurrentBetInputTextColor = Color.black;
+        private static readonly Color CurrentBetInputPlaceholderColor = new Color(0.4f, 0.4f, 0.4f, 0.75f);
+        private static readonly Color CurrentBetInputSelectionColor = new Color(0.2f, 0.45f, 0.85f, 0.35f);
+
+        private static Font GetCurrentBetInputFont(Font labelFont) =>
+            labelFont != null
+                ? labelFont
+                : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+        private static void ApplyCurrentBetInputTypography(Text text, Font labelFont)
+        {
+            text.font = GetCurrentBetInputFont(labelFont);
+            text.fontSize = CurrentBetInputFontSize;
+            text.fontStyle = CurrentBetInputFontStyle;
+        }
+
+        private static float MeasureCurrentBetInputWidth(Font labelFont)
+        {
+            string sample = FormatCurrentBetGerman(BlackjackGame.BetLimit);
+            var measureGo = new GameObject("CurrentBetWidthMeasure", typeof(Text));
+            try
+            {
+                Text measureText = measureGo.GetComponent<Text>();
+                ApplyCurrentBetInputTypography(measureText, labelFont);
+                measureText.text = sample;
+                measureText.alignment = TextAnchor.MiddleRight;
+
+                float textWidth = measureText.preferredWidth;
+                return textWidth + (CurrentBetInputHorizontalPadding * 2f);
+            }
+            finally
+            {
+                Object.Destroy(measureGo);
+            }
+        }
+
         private static int ClampCurrentBet(int bet) =>
             Mathf.Clamp(bet, 1, BlackjackGame.BetLimit);
+
+        private static readonly CultureInfo CurrentBetCulture =
+            CultureInfo.GetCultureInfo("de-DE");
+
+        private static string FormatCurrentBetGerman(int bet) =>
+            ClampCurrentBet(bet).ToString("N0", CurrentBetCulture);
+
+        private static bool TryParseCurrentBetGerman(string text, out int bet, bool allowPartial = false)
+        {
+            bet = allowPartial ? 0 : 1;
+            if (string.IsNullOrWhiteSpace(text))
+                return allowPartial;
+
+            string digits = text.Replace(".", string.Empty).Replace(" ", string.Empty).Trim();
+            if (digits.Length == 0)
+                return allowPartial;
+
+            for (int i = 0; i < digits.Length; i++)
+            {
+                if (!char.IsDigit(digits[i]))
+                    return false;
+            }
+
+            if (digits.Length > BlackjackGame.BetLimit.ToString().Length)
+                return false;
+
+            if (!int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out bet))
+                return false;
+
+            if (bet > BlackjackGame.BetLimit)
+                return false;
+
+            if (!allowPartial)
+                bet = ClampCurrentBet(bet);
+
+            return true;
+        }
 
         private void WireCurrentBetInputValidation()
         {
             var input = GetCurrentBetInputField();
             if (input == null) return;
 
-            input.contentType = InputField.ContentType.IntegerNumber;
-            input.characterLimit = BlackjackGame.BetLimit.ToString().Length;
+            input.contentType = InputField.ContentType.Standard;
+            input.characterLimit = FormatCurrentBetGerman(BlackjackGame.BetLimit).Length;
             input.onValidateInput = ValidateCurrentBetInputCharacter;
+
+            CurrentBetInputClickForwarder forwarder = input.GetComponent<CurrentBetInputClickForwarder>();
+            if (forwarder != null)
+                forwarder.OnSelected = StripCurrentBetInputFormatting;
+        }
+
+        private void StripCurrentBetInputFormatting()
+        {
+            if (_suppressCurrentBetInputCallbacks) return;
+
+            var input = GetCurrentBetInputField();
+            if (input == null || !TryParseCurrentBetGerman(input.text, out int bet))
+                return;
+
+            _suppressCurrentBetInputCallbacks = true;
+            input.SetTextWithoutNotify(bet.ToString(CultureInfo.InvariantCulture));
+            _suppressCurrentBetInputCallbacks = false;
+            input.MoveTextEnd(false);
         }
 
         private char ValidateCurrentBetInputCharacter(string text, int charIndex, char addedChar)
         {
+            if (addedChar == '.')
+            {
+                string withDot = text.Insert(charIndex, addedChar.ToString());
+                if (withDot.StartsWith(".") || withDot.Contains(".."))
+                    return '\0';
+
+                return TryParseCurrentBetGerman(withDot, out _, allowPartial: true) ? addedChar : '\0';
+            }
+
             if (!char.IsDigit(addedChar))
-                return addedChar;
+                return '\0';
 
             string proposed = text.Insert(charIndex, addedChar.ToString());
-            if (string.IsNullOrEmpty(proposed))
-                return addedChar;
-
-            if (!int.TryParse(proposed, out int value))
-                return '\0';
-
-            if (value > BlackjackGame.BetLimit)
-                return '\0';
-
-            return addedChar;
+            return TryParseCurrentBetGerman(proposed, out _, allowPartial: true) ? addedChar : '\0';
         }
 
         private void ReparentToggleToRow(string toggleName, string rowName)
@@ -739,15 +892,15 @@ namespace Blackjack
 
         private void OnDestroy()
         {
+            Application.quitting -= HandleApplicationQuitting;
+
             if (blackjackGame != null)
                 blackjackGame.OnAlwaysLoseDisabled -= DisableAlwaysLose;
         }
 
-        private void OnApplicationQuit()
-        {
-            SyncInitialBetFromGame();
-            PersistSettingsToFile();
-        }
+        private void HandleApplicationQuitting() => SaveSettings();
+
+        private void OnApplicationQuit() => SaveSettings();
 
         // ──────────────────────────────────────────────────────────────────────────
         // Toggle callbacks
@@ -1074,7 +1227,7 @@ namespace Blackjack
             _settingsDirty = true;
         }
 
-        private void ApplyCurrentBetFromInputField(string text = null)
+        private void ApplyCurrentBetFromInputField(string text = null, bool skipRefresh = false)
         {
             if (_settings == null) return;
 
@@ -1082,8 +1235,8 @@ namespace Blackjack
             if (input == null && text == null) return;
 
             string raw = text ?? input.text;
-            if (!int.TryParse(raw, out int bet))
-                bet = _settings.initialBet > 0 ? _settings.initialBet : 1;
+            if (!TryParseCurrentBetGerman(raw, out int bet))
+                bet = ClampCurrentBet(_settings.initialBet > 0 ? _settings.initialBet : 1);
 
             bet = ClampCurrentBet(bet);
             SavedInitialBet = bet;
@@ -1094,7 +1247,8 @@ namespace Blackjack
                 blackjackGame.ApplySavedInitialBetToBetArea();
             }
 
-            RefreshCurrentBetInputDisplay();
+            if (!skipRefresh)
+                RefreshCurrentBetInputDisplay();
         }
 
         private void RefreshCurrentBetInputDisplay()
@@ -1104,7 +1258,7 @@ namespace Blackjack
 
             int bet = ClampCurrentBet(_settings.initialBet > 0 ? _settings.initialBet : 1);
             _suppressCurrentBetInputCallbacks = true;
-            input.SetTextWithoutNotify(bet.ToString());
+            input.SetTextWithoutNotify(FormatCurrentBetGerman(bet));
             _suppressCurrentBetInputCallbacks = false;
         }
 
@@ -1226,15 +1380,12 @@ namespace Blackjack
         {
             if (!_menuVisible) return;
 
-            ApplyCurrentBetFromInputField();
-            SyncInitialBetFromGame();
-            PersistSettingsToFile();
+            SaveSettings();
             _settingsDirty = false;
 
             SetMenuVisible(false);
             if (playSound) blackjackGame?.PlayCloseSound();
 
-            SyncAutoplaySettingsFromToggles();
             ApplyAutoplaySettingsFromMenu(startIfEnabled: true);
         }
 
@@ -1298,7 +1449,57 @@ namespace Blackjack
         }
 
         /// <summary>Immediately flushes the current settings to disk. Called explicitly before the application quits.</summary>
-        public void SaveSettings() => PersistSettingsToFile();
+        public void SaveSettings()
+        {
+            SyncAllSettingsFromUI();
+            PersistSettingsToFile();
+        }
+
+        /// <summary>Copies all menu UI values into <see cref="OptionsSettings"/> before persisting.</summary>
+        private void SyncAllSettingsFromUI()
+        {
+            if (_settings == null) return;
+
+            if (_menuVisible)
+                ApplyCurrentBetFromInputField(skipRefresh: true);
+            else
+                SyncInitialBetFromGame();
+
+            SyncMartingaleThresholdFromSlider();
+            SyncAutoplaySettingsFromToggles();
+
+            if (blackjackTestToggle != null)
+                _settings.blackjackTestEnabled = blackjackTestToggle.isOn;
+            if (bjAllToggle != null)
+                _settings.bjAllEnabled = bjAllToggle.isOn;
+            if (ddTestToggle != null)
+                _settings.ddTestEnabled = ddTestToggle.isOn;
+            if (testSplitToggle != null)
+                _settings.testSplitEnabled = testSplitToggle.isOn;
+            if (dealerBjTestToggle != null)
+                _settings.dealerBjTestEnabled = dealerBjTestToggle.isOn;
+            if (overrideStrategyToggle != null)
+                _settings.overrideStrategyEnabled = overrideStrategyToggle.isOn;
+            if (alwaysLoseToggle != null)
+                _settings.alwaysLoseEnabled = alwaysLoseToggle.isOn;
+            if (showStrategyToggle != null)
+                _settings.showStrategyEnabled = showStrategyToggle.isOn;
+
+            Toggle martingaleActiveToggle = GetMartingaleActiveRowToggle();
+            if (martingaleActiveToggle != null)
+                _settings.martingaleActive = martingaleActiveToggle.isOn;
+
+            Toggle martingaleAutoPlayToggle = GetMartingaleAutoPlayRowToggle();
+            if (martingaleAutoPlayToggle != null)
+                _settings.martingaleAutoPlay = martingaleAutoPlayToggle.isOn;
+
+            if (volumeSlider != null)
+                _settings.volume = volumeSlider.value;
+
+            Slider splitRankSlider = GetTestSplitRankSlider();
+            if (splitRankSlider != null)
+                _settings.testSplitRank = Mathf.RoundToInt(splitRankSlider.value);
+        }
 
         /// <summary>Writes the current settings to disk via <see cref="SettingsRepository"/>.</summary>
         private void PersistSettingsToFile()
