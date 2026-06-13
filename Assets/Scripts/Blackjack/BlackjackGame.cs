@@ -64,6 +64,10 @@ namespace Blackjack
         [SerializeField] private TextMeshProUGUI streakLabel;
         [SerializeField] private TextMeshProUGUI martingaleModeLabel;
         [SerializeField] private TextMeshProUGUI handsDealtLabel;
+        [Tooltip("Fixed distance below the gap center for the status text bottom (about half the font size).")]
+        [SerializeField] private float statusLabelBottomBelowGapCenter = 20f;
+        [Tooltip("Extra vertical nudge in canvas pixels (negative = down).")]
+        [SerializeField] private float statusLabelVerticalOffset;
 
         [Header("Player Info Labels")]
         [Tooltip("Equal vertical gap in pixels between name, money, streak, and Martingale mode labels.")]
@@ -282,6 +286,9 @@ namespace Blackjack
 
         /// <summary>True while the developer menu is open. Used by <see cref="ChipBetting"/> to suppress chip input.</summary>
         public bool IsMenuOpen => menuController != null && menuController.IsMenuOpen;
+
+        /// <summary>True while an active Martingale run is in progress (after popup confirm until a win).</summary>
+        public bool IsInMartingaleMode => _inMartingaleMode;
 
         /// <summary>Closes the menu panel. Used by <see cref="ChipBetting"/> when a bet action is taken during the betting phase.</summary>
         /// <param name="playSound">When false, suppresses the close sound. Defaults to true.</param>
@@ -2824,38 +2831,101 @@ namespace Blackjack
         }
 
         /// <summary>
-        /// Pins the status label's left edge to the left edge of the dealer card area.
-        /// Uses the dealer card area's RectTransform to compute the offset at runtime,
-        /// so the alignment stays correct regardless of canvas or layout changes.
+        /// Pins the status label between dealer and player card areas: left edge aligned with
+        /// the dealer area, rendered text bottom on a fixed line in the gap.
         /// </summary>
         private void AlignStatusLabelToCardArea()
         {
-            if (dealerCardArea == null) return;
+            if (statusLabel == null || dealerCardArea == null || playerCardArea == null)
+                return;
 
             RectTransform dealerRT = dealerCardArea as RectTransform
                                      ?? dealerCardArea.GetComponent<RectTransform>();
-            if (dealerRT == null) return;
+            RectTransform playerRT = playerCardArea as RectTransform
+                                     ?? playerCardArea.GetComponent<RectTransform>();
+            if (dealerRT == null || playerRT == null)
+                return;
 
             RectTransform statusRT = statusLabel.rectTransform;
+            Transform parent = statusRT.parent;
+            if (parent == null)
+                return;
 
+            statusLabel.useMaxVisibleDescender = false;
             statusLabel.horizontalAlignment = HorizontalAlignmentOptions.Left;
-            statusLabel.verticalAlignment   = VerticalAlignmentOptions.Middle;
+            statusLabel.verticalAlignment   = VerticalAlignmentOptions.Bottom;
 
-            // Move pivot to the left edge so anchoredPosition controls the left side.
-            Vector2 pivot = statusRT.pivot;
-            pivot.x = 0f;
-            pivot.y = 0.5f;
-            statusRT.pivot = pivot;
+            statusRT.anchorMin = new Vector2(0.5f, 0.5f);
+            statusRT.anchorMax = new Vector2(0.5f, 0.5f);
+            statusRT.pivot = new Vector2(0f, 0f);
 
             Vector2 size = statusRT.sizeDelta;
             size.y = StatusLabelHeight;
             statusRT.sizeDelta = size;
 
-            // Left edge of dealer card area = its anchoredPosition.x - half its width.
-            float leftEdge = dealerRT.anchoredPosition.x - dealerRT.rect.width * 0.5f;
-            Vector2 pos = statusRT.anchoredPosition;
-            pos.x = leftEdge;
-            statusRT.anchoredPosition = pos;
+            float targetBottomY = GetStatusLabelBottomY(dealerRT, playerRT, parent);
+            float leftEdge      = GetRectLeftXInParent(dealerRT, parent);
+
+            statusRT.anchoredPosition = new Vector2(leftEdge, targetBottomY);
+            SnapStatusLabelRenderedBottomTo(parent, targetBottomY);
+        }
+
+        private float GetStatusGapMidY(RectTransform dealerRT, RectTransform playerRT, Transform parent)
+        {
+            float dealerBottom = GetRectEdgeYInParent(dealerRT, parent, top: false);
+            float playerTop    = GetRectEdgeYInParent(playerRT, parent, top: true);
+            return (dealerBottom + playerTop) * 0.5f + statusLabelVerticalOffset;
+        }
+
+        private float GetStatusLabelBottomY(RectTransform dealerRT, RectTransform playerRT, Transform parent) =>
+            GetStatusGapMidY(dealerRT, playerRT, parent) - statusLabelBottomBelowGapCenter;
+
+        /// <summary>Shifts the status label so TMP rendered bounds share the same bottom Y.</summary>
+        private void SnapStatusLabelRenderedBottomTo(Transform parent, float targetBottomY)
+        {
+            if (statusLabel == null || parent == null || string.IsNullOrEmpty(statusLabel.text))
+                return;
+
+            Canvas.ForceUpdateCanvases();
+            statusLabel.ForceMeshUpdate();
+
+            Bounds bounds = statusLabel.textBounds;
+            if (bounds.size.sqrMagnitude <= 0f)
+                return;
+
+            Vector3 localBottom = new Vector3(bounds.min.x, bounds.min.y, 0f);
+            float currentBottom = parent.InverseTransformPoint(statusLabel.transform.TransformPoint(localBottom)).y;
+            float delta = targetBottomY - currentBottom;
+
+            RectTransform statusRT = statusLabel.rectTransform;
+            statusRT.anchoredPosition += new Vector2(0f, delta);
+        }
+
+        private static float GetRectEdgeYInParent(RectTransform rt, Transform parent, bool top)
+        {
+            Vector3[] corners = new Vector3[4];
+            rt.GetWorldCorners(corners);
+
+            float edge = top ? float.NegativeInfinity : float.PositiveInfinity;
+            for (int i = 0; i < corners.Length; i++)
+            {
+                float y = parent.InverseTransformPoint(corners[i]).y;
+                edge = top ? Mathf.Max(edge, y) : Mathf.Min(edge, y);
+            }
+
+            return edge;
+        }
+
+        private static float GetRectLeftXInParent(RectTransform rt, Transform parent)
+        {
+            Vector3[] corners = new Vector3[4];
+            rt.GetWorldCorners(corners);
+
+            float left = float.PositiveInfinity;
+            for (int i = 0; i < corners.Length; i++)
+                left = Mathf.Min(left, parent.InverseTransformPoint(corners[i]).x);
+
+            return left;
         }
 
         private void ApplyStatusLabelAlignment()
@@ -2863,7 +2933,29 @@ namespace Blackjack
             if (statusLabel == null) return;
 
             statusLabel.horizontalAlignment = HorizontalAlignmentOptions.Left;
-            statusLabel.verticalAlignment   = VerticalAlignmentOptions.Middle;
+            statusLabel.verticalAlignment   = VerticalAlignmentOptions.Bottom;
+            RefreshStatusLabelVerticalPosition();
+        }
+
+        private void RefreshStatusLabelVerticalPosition()
+        {
+            if (statusLabel == null || dealerCardArea == null || playerCardArea == null)
+                return;
+
+            RectTransform dealerRT = dealerCardArea as RectTransform
+                                     ?? dealerCardArea.GetComponent<RectTransform>();
+            RectTransform playerRT = playerCardArea as RectTransform
+                                     ?? playerCardArea.GetComponent<RectTransform>();
+            RectTransform statusRT = statusLabel.rectTransform;
+            Transform parent = statusRT != null ? statusRT.parent : null;
+            if (dealerRT == null || playerRT == null || parent == null)
+                return;
+
+            float targetBottomY = GetStatusLabelBottomY(dealerRT, playerRT, parent);
+            float leftEdge      = GetRectLeftXInParent(dealerRT, parent);
+
+            statusRT.anchoredPosition = new Vector2(leftEdge, targetBottomY);
+            SnapStatusLabelRenderedBottomTo(parent, targetBottomY);
         }
 
         /// <summary>Sets the status label text and resets its color to the default.</summary>

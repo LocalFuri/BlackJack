@@ -14,11 +14,13 @@ namespace Blackjack
         [SerializeField] private Slider thresholdSlider;
 
         private Toggle _toggle;
+        private BlackjackGame _blackjackGame;
 
         private void Awake()
         {
             _toggle = GetComponent<Toggle>();
             ResolveThresholdSlider();
+            _blackjackGame = FindObjectOfType<BlackjackGame>();
         }
 
         private void LateUpdate()
@@ -40,8 +42,23 @@ namespace Blackjack
                 return;
             }
 
+            if (IsMartingaleMenuLocked())
+            {
+                _toggle.interactable = false;
+                SyncCheckmark(_toggle);
+                return;
+            }
+
             _toggle.interactable = true;
             SyncCheckmark(_toggle);
+        }
+
+        private bool IsMartingaleMenuLocked()
+        {
+            if (_blackjackGame == null)
+                _blackjackGame = FindObjectOfType<BlackjackGame>();
+
+            return _blackjackGame != null && _blackjackGame.IsInMartingaleMode;
         }
 
         internal static void HideCheckmark(Toggle toggle)

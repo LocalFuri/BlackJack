@@ -2389,37 +2389,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 210100006}
   m_CullTransparentMesh: 1
---- !u!1 &215121738
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 215121739}
-  m_Layer: 0
-  m_Name: _STRAY_DELETE_ME
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &215121739
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 215121738}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &220390481
 GameObject:
   m_ObjectHideFlags: 0
@@ -3833,6 +3802,7 @@ MonoBehaviour:
   cardViewPrefab: {fileID: 4577850078145282559, guid: 09bd14fdcef057348a61551a212f6b12, type: 3}
   useWorldSpaceCards: 1
   worldCardPrefab: {fileID: 8012345678901234567, guid: c2f9e7d6481a5937b4c5d6e7f8091a2b, type: 3}
+  buttonRow: {fileID: 0}
   dealButton: {fileID: 327723775}
   hitButton: {fileID: 2118831507}
   standButton: {fileID: 1070746305}
@@ -4203,6 +4173,7 @@ MonoBehaviour:
   martingaleThresholdSlider: {fileID: 103199053}
   defaultMartingaleThreshold: 1
   testSplitRankSlider: {fileID: 241324253}
+  currentBetInputField: {fileID: 0}
   blackjackGame: {fileID: 383358998}
   strategyTableUI: {fileID: 1860292068}
   uiSounds: {fileID: 11400000, guid: 60decf6ddf43b154c8d0e5781e7d3165, type: 2}
@@ -5191,7 +5162,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'CodeRed Soft: 2026-06-12'
+  m_text: "CodeRed Soft \xAE 2026-06-13"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -15795,5 +15766,4 @@ SceneRoots:
   - {fileID: 383358997}
   - {fileID: 505432071}
   - {fileID: 1877272416}
-  - {fileID: 215121739}
   - {fileID: 7700002}

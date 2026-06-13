@@ -88,6 +88,9 @@ namespace Blackjack
         /// <summary>Guard flag when programmatically updating the current-bet input field.</summary>
         private bool _suppressCurrentBetInputCallbacks;
 
+        /// <summary>Cached lock state so we only refresh Martingale menu controls when mode toggles.</summary>
+        private bool _lastMartingaleMenuLocked;
+
         /// <summary>Last threshold read from the slider; used to detect UI changes without relying on slider callbacks alone.</summary>
         private int _lastMartingaleThresholdFromSlider = int.MinValue;
 
@@ -186,11 +189,22 @@ namespace Blackjack
 
             SyncMartingaleThresholdIfSliderChanged();
             HandleCurrentBetInputTabFocus();
+            RefreshMartingaleMenuLockIfChanged();
+        }
+
+        private void RefreshMartingaleMenuLockIfChanged()
+        {
+            if (!_menuVisible) return;
+
+            bool locked = IsMartingaleMenuLocked;
+            if (locked == _lastMartingaleMenuLocked) return;
+
+            RefreshMartingaleMenuLock();
         }
 
         private void HandleCurrentBetInputTabFocus()
         {
-            if (!_menuVisible || Keyboard.current == null)
+            if (!_menuVisible || Keyboard.current == null || IsMartingaleMenuLocked)
                 return;
 
             if (!Keyboard.current[Key.Tab].wasPressedThisFrame)
@@ -641,6 +655,8 @@ namespace Blackjack
         private static readonly Color CurrentBetInputTextColor = Color.black;
         private static readonly Color CurrentBetInputPlaceholderColor = new Color(0.4f, 0.4f, 0.4f, 0.75f);
         private static readonly Color CurrentBetInputSelectionColor = new Color(0.2f, 0.45f, 0.85f, 0.35f);
+        private static readonly Color CurrentBetInputLockedBackgroundColor = new Color(0.85f, 0.85f, 0.85f, 1f);
+        private static readonly Color CurrentBetInputLockedTextColor = new Color(0.45f, 0.45f, 0.45f, 1f);
 
         private static Font GetCurrentBetInputFont(Font labelFont) =>
             labelFont != null
@@ -1078,6 +1094,7 @@ namespace Blackjack
         public void OnMartingaleActiveToggled(bool value)
         {
             if (_suppressToggleCallbacks) return;
+            if (IsMartingaleMenuLocked) return;
 
             if (value && ReadMartingaleThresholdFromSlider() <= 0)
                 SetMartingaleThreshold(1);
@@ -1097,12 +1114,16 @@ namespace Blackjack
                 blackjackGame?.CancelMartingale();
             }
 
+            if (_menuVisible)
+                RefreshMartingaleMenuLock();
+
             _settingsDirty = true;
         }
 
         public void OnMartingaleAutoPlayToggled(bool value)
         {
             if (_suppressToggleCallbacks) return;
+            if (IsMartingaleMenuLocked) return;
 
             if (value && ReadMartingaleThresholdFromSlider() <= 0)
                 SetMartingaleThreshold(1);
@@ -1162,6 +1183,7 @@ namespace Blackjack
         /// </summary>
         private void SyncMartingaleThresholdIfSliderChanged()
         {
+            if (IsMartingaleMenuLocked) return;
             if (martingaleThresholdSlider == null) return;
 
             int sliderThreshold = ReadMartingaleThresholdFromSlider();
@@ -1180,6 +1202,8 @@ namespace Blackjack
 
         public void OnMartingaleThresholdChanged(float value)
         {
+            if (IsMartingaleMenuLocked) return;
+
             _settings.martingaleThreshold = Mathf.RoundToInt(value);
             _lastMartingaleThresholdFromSlider = _settings.martingaleThreshold;
             ApplyMartingaleThresholdState();
@@ -1189,6 +1213,12 @@ namespace Blackjack
         /// <summary>Unchecks both Martingale toggles when the threshold is 0; both stay clickable.</summary>
         private void ApplyMartingaleThresholdState()
         {
+            if (IsMartingaleMenuLocked)
+            {
+                RefreshMartingaleMenuLock();
+                return;
+            }
+
             int threshold = ReadMartingaleThresholdFromSlider();
             _settings.martingaleThreshold = threshold;
             _lastMartingaleThresholdFromSlider = threshold;
@@ -1197,23 +1227,25 @@ namespace Blackjack
             var autoPlayToggle = GetMartingaleAutoPlayRowToggle();
             EnsureShowStrategyToggleUnlocked();
 
+            bool togglesInteractable = true;
+
             if (threshold <= 0)
             {
                 _settings.martingaleActive   = false;
                 _settings.martingaleAutoPlay = false;
-                ApplyMartingaleToggleVisual(activeToggle, isOn: false, interactable: true);
-                ApplyMartingaleToggleVisual(autoPlayToggle, isOn: false, interactable: true);
+                ApplyMartingaleToggleVisual(activeToggle, isOn: false, interactable: togglesInteractable);
+                ApplyMartingaleToggleVisual(autoPlayToggle, isOn: false, interactable: togglesInteractable);
                 EnsureShowStrategyToggleUnlocked();
                 blackjackGame?.CancelMartingale();
                 return;
             }
 
             _settings.martingaleActive = true;
-            ApplyMartingaleToggleVisual(activeToggle, isOn: true, interactable: true);
+            ApplyMartingaleToggleVisual(activeToggle, isOn: true, interactable: togglesInteractable);
             ApplyMartingaleToggleVisual(
                 autoPlayToggle,
                 isOn: _settings.martingaleAutoPlay,
-                interactable: true);
+                interactable: togglesInteractable);
             EnsureShowStrategyToggleUnlocked();
         }
 
@@ -1230,14 +1262,60 @@ namespace Blackjack
         public void OnCurrentBetInputChanged(string text)
         {
             if (_settings == null || _suppressCurrentBetInputCallbacks) return;
+            if (IsMartingaleMenuLocked) return;
 
             ApplyCurrentBetFromInputField(text);
             _settingsDirty = true;
         }
 
+        private bool IsMartingaleMenuLocked =>
+            blackjackGame != null && blackjackGame.IsInMartingaleMode;
+
+        /// <summary>Locks Martingale-related menu controls while an active run is in progress.</summary>
+        private void RefreshMartingaleMenuLock()
+        {
+            bool locked = IsMartingaleMenuLocked;
+            _lastMartingaleMenuLocked = locked;
+
+            InputField input = GetCurrentBetInputField();
+            if (input != null)
+            {
+                input.interactable = !locked;
+
+                if (input.textComponent != null)
+                    input.textComponent.color = locked ? CurrentBetInputLockedTextColor : CurrentBetInputTextColor;
+
+                if (input.targetGraphic is Image background)
+                    background.color = locked ? CurrentBetInputLockedBackgroundColor : CurrentBetInputBackgroundColor;
+
+                if (locked)
+                    ReleaseCurrentBetInputFocus();
+            }
+
+            if (martingaleThresholdSlider != null)
+                martingaleThresholdSlider.interactable = !locked;
+
+            if (locked)
+            {
+                ApplyMartingaleToggleVisual(
+                    GetMartingaleActiveRowToggle(),
+                    _settings.martingaleActive,
+                    interactable: false);
+                ApplyMartingaleToggleVisual(
+                    GetMartingaleAutoPlayRowToggle(),
+                    _settings.martingaleAutoPlay,
+                    interactable: false);
+            }
+            else
+            {
+                ApplyMartingaleThresholdState();
+            }
+        }
+
         private void ApplyCurrentBetFromInputField(string text = null, bool skipRefresh = false)
         {
             if (_settings == null) return;
+            if (IsMartingaleMenuLocked) return;
 
             var input = GetCurrentBetInputField();
             if (input == null && text == null) return;
@@ -1392,15 +1470,18 @@ namespace Blackjack
             SyncMartingaleThresholdFromSlider();
             ApplyInitialBetFromSettings();
             RefreshCurrentBetInputDisplay();
+            RefreshMartingaleMenuLock();
             if (playSound)
                 uiSounds?.toggleSound.Play(audioSource);
 
-            StartCoroutine(FocusCurrentBetInputNextFrame());
+            if (!IsMartingaleMenuLocked)
+                StartCoroutine(FocusCurrentBetInputNextFrame());
         }
 
         private IEnumerator FocusCurrentBetInputNextFrame()
         {
             yield return null;
+            if (IsMartingaleMenuLocked) yield break;
             FocusCurrentBetInputField();
         }
 
@@ -1427,7 +1508,9 @@ namespace Blackjack
             if (blackjackGame == null || _settings.initialBet <= 0) return;
 
             blackjackGame.InitialBet = _settings.initialBet;
-            blackjackGame.ApplySavedInitialBetToBetArea();
+
+            if (!blackjackGame.IsInMartingaleMode)
+                blackjackGame.ApplySavedInitialBetToBetArea();
         }
 
         /// <summary>Reads autoplay checkbox state from the UI so menu close matches what the player selected.</summary>
