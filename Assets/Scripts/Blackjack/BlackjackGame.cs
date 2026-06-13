@@ -3277,15 +3277,13 @@ namespace Blackjack
                 yield return WaitForGameDelay(loseSound.Length);
         }
 
-        /// <summary>Plays lose sound and a random non-repeating male reaction sound when the dealer has a natural blackjack.</summary>
+        /// <summary>Plays a random non-repeating male reaction sound when the dealer has a natural blackjack.</summary>
         private float PlayDealerBlackjackLoseSound()
         {
             if (SkipAutoplayDelays)
                 return 0f;
 
-            PlayLoseSound();
-
-            float longestDuration = loseSound.HasClip ? loseSound.Length : 0f;
+            float longestDuration = 0f;
 
             if (damnitSound.HasClip && audioSource != null)
             {
