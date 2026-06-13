@@ -19,6 +19,7 @@ namespace UI
         [SerializeField] private AudioMixerGroup mixerGroup;
 
         private AudioSource _audioSource;
+        private int _lastPlayedIndex = -1;
 
         private void Awake()
         {
@@ -40,10 +41,14 @@ namespace UI
             if (_audioSource.isPlaying)
                 return;
 
-            SoundEntry chosen = femaleSpeechSounds[Random.Range(0, femaleSpeechSounds.Length)];
+            int index = femaleSpeechSounds.Length > 1
+                ? (Random.Range(0, femaleSpeechSounds.Length - 1) + _lastPlayedIndex + 1) % femaleSpeechSounds.Length
+                : 0;
+            SoundEntry chosen = femaleSpeechSounds[index];
             if (!chosen.HasClip)
                 return;
 
+            _lastPlayedIndex = index;
             _audioSource.clip   = chosen.clip;
             _audioSource.volume = chosen.volume;
             _audioSource.Play();

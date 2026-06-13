@@ -31,6 +31,17 @@ namespace Blackjack
         [Header("Flip")]
         [SerializeField] private float flipDuration = 0.35f;
 
+        [Header("Natural Blackjack Glow")]
+        [Tooltip("Tint at the dimmest point of the pulse (player or dealer natural blackjack).")]
+        [SerializeField] private Color glowColorLow = new Color(0.95f, 0.72f, 0.08f, 1f);
+        [Tooltip("Tint at the brightest point of the pulse.")]
+        [SerializeField] private Color glowColorHigh = new Color(1.35f, 1.05f, 0.25f, 1f);
+        [SerializeField] private float glowBreatheSpeed = 0.7f;
+        [SerializeField] private float glowFlickerSpeed = 4.5f;
+        [SerializeField] private float glowFlickerWeight = 0.35f;
+        [SerializeField] private float glowPulseMin = 0.85f;
+        [SerializeField] private float glowPulseMax = 1.15f;
+
         private MeshFilter _meshFilter;
         private MeshRenderer _meshRenderer;
         private Material _cardMaterial;
@@ -45,6 +56,8 @@ namespace Blackjack
         private Vector3[] _workVertices;
         private bool _isPeeking;
         private Coroutine _flipCoroutine;
+        private Coroutine _glowCoroutine;
+        private float _glowNoiseOffset;
 
         public float CardWorldWidth => cardWorldWidth;
 
@@ -61,6 +74,7 @@ namespace Blackjack
             _meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             _meshRenderer.receiveShadows = false;
             _meshRenderer.sortingOrder = 100;
+            _glowNoiseOffset = UnityEngine.Random.Range(0f, 100f);
             EnsurePeekEaseCurve();
         }
 
@@ -218,15 +232,58 @@ namespace Blackjack
 
         public void SetGlow(bool enabled)
         {
-            if (_meshRenderer == null || _cardMaterial == null)
+            StopGlowPulse();
+            if (_cardMaterial == null)
                 return;
 
-            _cardMaterial.color = enabled ? new Color(1.15f, 1.05f, 0.75f, 1f) : Color.white;
+            _cardMaterial.color = enabled ? SampleGlowColor(1f) : Color.white;
         }
 
-        public void StartGlowPulse() => SetGlow(true);
+        public void StartGlowPulse()
+        {
+            if (_cardMaterial == null)
+                return;
 
-        public void StopGlowPulse() => SetGlow(false);
+            StopGlowPulse();
+            _glowCoroutine = StartCoroutine(GlowPulseRoutine());
+        }
+
+        public void StopGlowPulse()
+        {
+            if (_glowCoroutine != null)
+            {
+                StopCoroutine(_glowCoroutine);
+                _glowCoroutine = null;
+            }
+
+            if (_cardMaterial != null)
+                _cardMaterial.color = Color.white;
+        }
+
+        private Color SampleGlowColor(float pulseT)
+        {
+            float intensity = Mathf.Lerp(glowPulseMin, glowPulseMax, pulseT);
+            Color tint = Color.Lerp(glowColorLow, glowColorHigh, pulseT);
+            return new Color(tint.r * intensity, tint.g * intensity, tint.b * intensity, 1f);
+        }
+
+        private IEnumerator GlowPulseRoutine()
+        {
+            float time = 0f;
+            while (true)
+            {
+                time += Time.deltaTime;
+
+                float breathe = (Mathf.Sin(time * glowBreatheSpeed * Mathf.PI * 2f) + 1f) * 0.5f;
+                float flicker = Mathf.PerlinNoise(time * glowFlickerSpeed + _glowNoiseOffset, 0f);
+                float t       = Mathf.Lerp(breathe, flicker, glowFlickerWeight);
+
+                if (_cardMaterial != null)
+                    _cardMaterial.color = SampleGlowColor(t);
+
+                yield return null;
+            }
+        }
 
         public IEnumerator DealerPeekHoleCardAnimation()
         {
@@ -309,6 +366,8 @@ namespace Blackjack
 
         private void OnDestroy()
         {
+            StopGlowPulse();
+
             if (_cardMesh != null)
                 Destroy(_cardMesh);
             if (_cardMaterial != null)

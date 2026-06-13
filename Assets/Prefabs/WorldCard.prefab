@@ -129,3 +129,10 @@ MonoBehaviour:
     m_RotationOrder: 4
   cornerRegionStart: 0.68
   flipDuration: 0.35
+  glowColorLow: {r: 0.95, g: 0.72, b: 0.08, a: 1}
+  glowColorHigh: {r: 1.35, g: 1.05, b: 0.25, a: 1}
+  glowBreatheSpeed: 0.7
+  glowFlickerSpeed: 4.5
+  glowFlickerWeight: 0.35
+  glowPulseMin: 0.85
+  glowPulseMax: 1.15

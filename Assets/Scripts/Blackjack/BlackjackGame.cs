@@ -141,6 +141,8 @@ namespace Blackjack
     [SerializeField] private SoundEntry yuhuSound;
 
     private SoundEntry? _lastDoubleBJSound;
+    private SoundEntry[] _maleSpeechPool;
+    private int _lastDealerNaturalBJReactionIndex = -1;
     private bool _doubleBJSoundPlaying;
     private bool _dealerNaturalBJPlaying;
     private float _fireworksEndTime;
@@ -686,6 +688,15 @@ namespace Blackjack
             SetStatus("Press Deal to start");
 
             StartCoroutine(FinishSessionStart());
+
+            _maleSpeechPool = new[]
+            {
+                ahdamnitSound, areyouseriousSound, bullshitSound, cantbelievethatSndSound,
+                cheaterSound, comeonSound, doitagainSound, fuckSound, helltopaySound,
+                jesusSound, nowaySound, seriouslySound, thegameisriggedSound, thissucksSound,
+                trythatagainSound, unbelievableSound, whatthefuckSound, yourecheatingSound,
+                yourekiddingmeSound, youwillfryinhellSound, youwillpayforthatSound
+            };
         }
 
         /// <summary>Runs after all Start() methods so stray audio from a prior session cannot overlap startup sounds or autoplay.</summary>
@@ -3266,7 +3277,7 @@ namespace Blackjack
                 yield return WaitForGameDelay(loseSound.Length);
         }
 
-        /// <summary>Plays lose and damnit sounds when the dealer has a natural blackjack.</summary>
+        /// <summary>Plays lose sound and a random non-repeating male reaction sound when the dealer has a natural blackjack.</summary>
         private float PlayDealerBlackjackLoseSound()
         {
             if (SkipAutoplayDelays)
@@ -3283,9 +3294,34 @@ namespace Blackjack
                     longestDuration = damnitSound.Length;
             }
 
+            SoundEntry? reaction = PickNoDuplicateReactionSound();
+            if (reaction.HasValue && reaction.Value.HasClip && audioSource != null)
+            {
+                PlayGameSound(reaction.Value);
+                if (reaction.Value.Length > longestDuration)
+                    longestDuration = reaction.Value.Length;
+            }
+
             return longestDuration > 0f ? longestDuration : 3f;
         }
 
+        /// <summary>Picks a random male reaction sound, never repeating the last played clip.</summary>
+        private SoundEntry? PickNoDuplicateReactionSound()
+        {
+            if (_maleSpeechPool == null || _maleSpeechPool.Length == 0)
+                return null;
+
+            int index = _maleSpeechPool.Length > 1
+                ? (UnityEngine.Random.Range(0, _maleSpeechPool.Length - 1) + _lastDealerNaturalBJReactionIndex + 1) % _maleSpeechPool.Length
+                : 0;
+
+            SoundEntry chosen = _maleSpeechPool[index];
+            if (!chosen.HasClip)
+                return null;
+
+            _lastDealerNaturalBJReactionIndex = index;
+            return chosen;
+        }
         /// <summary>Plays the tie sound if both clip and source are assigned.</summary>
         private void PlayTieSound() => PlayGameSound(tieSound);
 
