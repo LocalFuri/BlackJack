@@ -23,6 +23,8 @@ namespace Blackjack
         [SerializeField] private float flickerWeight = 0.35f;
         [SerializeField] private float pulseMinAlpha = 0.15f;
         [SerializeField] private float pulseMaxAlpha = 0.88f;
+        [SerializeField] private Color glowColorMin  = new Color(0.95f, 0.72f, 0.08f);
+        [SerializeField] private Color glowColorMax  = new Color(1.35f, 1.05f, 0.25f);
 
         private Sprite _faceSprite;
         private Sprite _backSprite;
@@ -164,8 +166,8 @@ namespace Blackjack
                 float alpha   = Mathf.Lerp(pulseMinAlpha, pulseMaxAlpha, t);
 
                 Color color = Color.Lerp(
-                    new Color(0.95f, 0.72f, 0.08f, alpha),
-                    new Color(1.35f, 1.05f, 0.25f, alpha),
+                    new Color(glowColorMin.r, glowColorMin.g, glowColorMin.b, alpha),
+                    new Color(glowColorMax.r, glowColorMax.g, glowColorMax.b, alpha),
                     t);
 
                 glowImage.color = color;

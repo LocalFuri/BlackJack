@@ -171,4 +171,6 @@ MonoBehaviour:
   flickerSpeed: 4.5
   flickerWeight: 0.35
   pulseMinAlpha: 0.15
-  pulseMaxAlpha: 0.88
+  pulseMaxAlpha: 1
+  glowColorMin: {r: 0.95, g: 0.72, b: 0.08, a: 1}
+  glowColorMax: {r: 1.35, g: 1.05, b: 0.25, a: 1}
