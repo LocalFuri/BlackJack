@@ -35,6 +35,8 @@ namespace Blackjack
         [SerializeField] private GameObject worldCardPrefab;
 
         [Header("Buttons")]
+        [Tooltip("Parent row for Deal / Hit / Stand / etc. Hidden during autoplay at max speed.")]
+        [SerializeField] private GameObject buttonRow;
         [SerializeField] private Button dealButton;
         [SerializeField] private Button hitButton;
         [SerializeField] private Button standButton;
@@ -1147,6 +1149,7 @@ namespace Blackjack
             _autoPlayEnabled = enabled;
             SetStatus(_autoPlayEnabled ? "Auto-play ON" : "Auto-play OFF");
             Time.timeScale = (_autoPlayEnabled && _autoplayMaxSpeed) ? MaxAutoplayTimeScale : 1f;
+            UpdateButtonRowForAutoplay();
         }
 
         private const float MaxAutoplayTimeScale = 8f;
@@ -1178,6 +1181,7 @@ namespace Blackjack
         {
             _autoplayMaxSpeed = enabled;
             Time.timeScale = (enabled && _autoPlayEnabled) ? MaxAutoplayTimeScale : 1f;
+            UpdateButtonRowForAutoplay();
         }
 
         /// <summary>Enables auto-play when the menu Autoplay option is on at game load or menu close.</summary>
@@ -3240,6 +3244,76 @@ namespace Blackjack
         }
 
         private void SetButtonState(bool dealEnabled, bool actionEnabled, bool splitEnabled, bool doubleDownEnabled = false, bool surrenderEnabled = false)
+        {
+            if (SkipAutoplayDelays)
+            {
+                SetButtonRowVisible(false);
+                return;
+            }
+
+            SetButtonRowVisible(true);
+            ApplyButtonVisibility(dealEnabled, actionEnabled, splitEnabled, doubleDownEnabled, surrenderEnabled);
+        }
+
+        private GameObject ResolveButtonRow()
+        {
+            if (buttonRow != null)
+                return buttonRow;
+
+            if (dealButton != null)
+                buttonRow = dealButton.transform.parent.gameObject;
+
+            return buttonRow;
+        }
+
+        private void SetButtonRowVisible(bool visible)
+        {
+            GameObject row = ResolveButtonRow();
+            if (row != null)
+                row.SetActive(visible);
+        }
+
+        /// <summary>Hides ButtonRow during max-speed autoplay; restores buttons when it ends.</summary>
+        private void UpdateButtonRowForAutoplay()
+        {
+            if (SkipAutoplayDelays)
+            {
+                SetButtonRowVisible(false);
+                return;
+            }
+
+            SetButtonRowVisible(true);
+            ApplyButtonStateForCurrentGameState();
+        }
+
+        private void ApplyButtonStateForCurrentGameState()
+        {
+            switch (_state)
+            {
+                case GameState.Idle:
+                case GameState.RoundOver:
+                    ApplyButtonVisibility(dealEnabled: true, actionEnabled: false, splitEnabled: false);
+                    break;
+                case GameState.PlayerTurn:
+                    ApplyButtonVisibility(
+                        dealEnabled: false,
+                        actionEnabled: true,
+                        splitEnabled: CanSplit(),
+                        doubleDownEnabled: CanDoubleDown(),
+                        surrenderEnabled: CanSurrender());
+                    break;
+                case GameState.DealerTurn:
+                    ApplyButtonVisibility(dealEnabled: false, actionEnabled: false, splitEnabled: false);
+                    break;
+            }
+        }
+
+        private void ApplyButtonVisibility(
+            bool dealEnabled,
+            bool actionEnabled,
+            bool splitEnabled,
+            bool doubleDownEnabled = false,
+            bool surrenderEnabled = false)
         {
             dealButton.interactable = dealEnabled;
             dealButton.gameObject.SetActive(dealEnabled);
