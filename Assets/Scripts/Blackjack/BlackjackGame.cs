@@ -3177,12 +3177,15 @@ namespace Blackjack
             else
                 RefreshMoneyLabel();
 
-            ApplyWinBetAreaRestore();
-
             if (playChipSound)
                 PlayGameSound(chipSound);
 
-            _winSoundEndTime = Time.time + (playChipSound && !SkipAutoplayDelays ? chipSound.Length : 0f);
+            if (playChipSound && chipSound.Length > 0f && !SkipAutoplayDelays)
+                yield return WaitForGameDelay(chipSound.Length);
+
+            ApplyWinBetAreaRestore();
+
+            _winSoundEndTime = Time.time;
             _winPresentationComplete = true;
         }
         private IEnumerator PlayResetSoundAfterDelay(float delay)
