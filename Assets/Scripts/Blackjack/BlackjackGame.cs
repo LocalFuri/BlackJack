@@ -1035,7 +1035,6 @@ namespace Blackjack
             _savedBetBeforeAction = CurrentBet;
             _playerMoney -= CurrentBet;
             RefreshMoneyLabel();
-            chipBetting?.DoubleBetChips();
             StartCoroutine(PerformSplit());
         }
 
@@ -1459,6 +1458,7 @@ namespace Blackjack
             PlayGameSound(chipSound);
             if (chipSound.Length > 0f)
                 yield return WaitForGameDelay(chipSound.Length);
+            chipBetting?.DoubleBetChips();
 
             // Deal second card to each hand
             yield return StartCoroutine(DealCardTo(_playerHand,  _playerCardViews, playerCardArea, faceUp: true));
@@ -1509,12 +1509,15 @@ namespace Blackjack
                 _splitHandDoubledDown[_activeHandIndex] = true;
             _playerMoney -= extraBet;
             RefreshMoneyLabel();
+            PlayGameSound(ddSound);
+            if (ddSound.Length > 0f)
+                yield return WaitForGameDelay(ddSound.Length);
+            else
+                yield return WaitForGameDelay(0.5f);
             if (_isSplitRound)
                 chipBetting?.SetBet(CurrentBet + extraBet, playSound: false);
             else
                 chipBetting?.DoubleBetChips();
-            PlayGameSound(ddSound); //mark dd sound
-            yield return WaitForGameDelay(0.5f);
             yield return StartCoroutine(
                 DealCardTo(ActiveHand, ActiveViews,
                            _activeHandIndex == 0 ? playerCardArea : splitCardArea,
@@ -1752,7 +1755,7 @@ namespace Blackjack
         /// so payouts return the appropriate amount to the balance.
         /// Win → bet×2 | BJ → bet×2.5 | Push → bet | Surrender → bet×0.5 | Lose → 0
         /// </summary>
-        private void ApplyPayout(PayoutResult result, int bet)
+        private void ApplyPayout(PayoutResult result, int bet, bool refreshLabel = true)
         {
             _playerMoney += result switch
             {
@@ -1763,7 +1766,8 @@ namespace Blackjack
                 _                         => 0,                   // Lose — bet already gone
             };
 
-            RefreshMoneyLabel();
+            if (refreshLabel)
+                RefreshMoneyLabel();
         }
 
         private void RegisterDeferredWinPayout(PayoutResult result, int bet)
@@ -2188,7 +2192,7 @@ namespace Blackjack
                     {
                         results.Add(ColorizeText($"{labels[i]}: Win", WinColor));
                         anyWin = true;
-                        ApplyPayout(PayoutResult.Win, handBet);
+                        ApplyPayout(PayoutResult.Win, handBet, refreshLabel: false);
                     }
                     else if (s < dealerScore)
                     {
@@ -2219,7 +2223,7 @@ namespace Blackjack
                 }
 
                 if (anyWin && !anyLoss) { StartCoroutine(PlayWinAndChipRoutine(useCelebration: _inMartingaleMode, playResetSound: _inMartingaleMode)); _playerWon = true; }
-                else if (anyWin && anyLoss) PlayTieSound();
+                else if (anyWin && anyLoss) { PlayTieSound(); RefreshMoneyLabel(); }
                 else if (anyLoss)           yield return StartCoroutine(PlayLoseSoundAndWait());
                 else                        PlayTieSound();
 
@@ -2244,8 +2248,8 @@ namespace Blackjack
                 // Capture before RecordRoundOutcome clears _inMartingaleMode.
                 bool isMartingaleWin = _inMartingaleMode;
                 if      (IsNaturalBlackjack(_playerHand)) { StartCoroutine(PlayWinAndChipRoutine(useCelebration: true, playResetSound: isMartingaleWin, deferPayout: true, deferredPayout: PayoutResult.BlackjackWin, deferredBet: winBet)); RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor); }
-                else if (dealerBust)                    { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin));  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
-                else if (p > dealerScore)               { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin));  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet); }
+                else if (dealerBust)                    { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin));  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet, refreshLabel: false); }
+                else if (p > dealerScore)               { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin));  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet, refreshLabel: false); }
                 else if (dealerScore > p)
                 {
                     RecordRoundOutcome(true, lostAmount: stakedBet, scoreDelta: -1, lossCount: _doubleDownExtraBet > 0 ? 2 : 1);
@@ -3172,18 +3176,18 @@ namespace Blackjack
                 yield return null;
             }
 
-            if (deferPayout && deferredBet > 0)
-                ApplyDeferredWinPayoutIfPending();
-            else
-                RefreshMoneyLabel();
-
             if (playChipSound)
                 PlayGameSound(chipSound);
+
+            ApplyWinBetAreaRestore();
 
             if (playChipSound && chipSound.Length > 0f && !SkipAutoplayDelays)
                 yield return WaitForGameDelay(chipSound.Length);
 
-            ApplyWinBetAreaRestore();
+            if (deferPayout && deferredBet > 0)
+                ApplyDeferredWinPayoutIfPending();
+            else
+                RefreshMoneyLabel();
 
             _winSoundEndTime = Time.time;
             _winPresentationComplete = true;
