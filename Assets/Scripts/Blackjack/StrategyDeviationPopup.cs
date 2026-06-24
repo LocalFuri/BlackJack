@@ -1,4 +1,5 @@
 using System;
+using Blackjack.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -45,6 +46,7 @@ namespace Blackjack
             keepButton.onClick.AddListener(OnKeepClicked);
             reconsiderButton.onClick.AddListener(OnReconsiderClicked);
             ApplyButtonLabels();
+            ApplyButtonRowLayout();
             gameObject.SetActive(false);
         }
 
@@ -61,6 +63,30 @@ namespace Blackjack
             var text = button.GetComponentInChildren<TextMeshProUGUI>(true);
             if (text != null)
                 text.text = label;
+        }
+
+        private void ApplyButtonRowLayout()
+        {
+            if (keepButton == null) return;
+
+            Transform row = keepButton.transform.parent;
+            if (row == null) return;
+
+            if (row.TryGetComponent(out HorizontalLayoutGroup layoutGroup))
+            {
+                layoutGroup.childForceExpandWidth = false;
+                layoutGroup.childControlWidth = false;
+            }
+
+            var fontSizer = row.GetComponent<ButtonRowFontSize>();
+            if (fontSizer == null)
+                fontSizer = row.gameObject.AddComponent<ButtonRowFontSize>();
+
+            var keepLabel = keepButton.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (keepLabel != null)
+                fontSizer.SetReferenceLabel(keepLabel);
+            else
+                fontSizer.Apply();
         }
 
         /// <summary>

@@ -1452,6 +1452,21 @@ namespace Blackjack
             set => _settings.initialBet = ClampCurrentBet(value);
         }
 
+        /// <summary>
+        /// Updates Current Bet from chip-tray changes during gameplay (does not rebuild the chip area).
+        /// </summary>
+        public void UpdateSavedInitialBetFromGameplay(int bet)
+        {
+            if (_settings == null || bet <= 0) return;
+
+            int clamped = ClampCurrentBet(bet);
+            SavedInitialBet = clamped;
+            _settingsDirty = true;
+
+            if (_menuVisible)
+                RefreshCurrentBetInputDisplay();
+        }
+
         /// <summary>Shows or hides the menu panel. Opens in any game state; coroutine-driven gameplay pauses via WaitUntil checks.</summary>
         private void ToggleMenu()
         {

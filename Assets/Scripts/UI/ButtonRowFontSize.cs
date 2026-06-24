@@ -17,7 +17,13 @@ namespace Blackjack.UI
         [Tooltip("Optional label used to size buttons (e.g. Surrender). When empty, the widest child label is used.")]
         [SerializeField] private TMP_Text referenceLabel;
 
-        [Tooltip("Extra horizontal space added on each side of the label text.")]
+        [Tooltip("When enabled, each side gets padding equal to one or more 'M' character widths from the sizing label's font.")]
+        [SerializeField] private bool useLetterPadding = true;
+
+        [Tooltip("How many character widths to add on each side when letter padding is enabled.")]
+        [SerializeField] private float letterPaddingCount = 1f;
+
+        [Tooltip("Fixed extra horizontal space on each side when letter padding is disabled.")]
         [SerializeField] private float horizontalPadding = 24f;
 
         [Header("Font size")]
@@ -29,6 +35,12 @@ namespace Blackjack.UI
 
         private void OnValidate() => Apply();
         private void OnEnable() => Apply();
+
+        public void SetReferenceLabel(TMP_Text label)
+        {
+            referenceLabel = label;
+            Apply();
+        }
 
         /// <summary>Computes button widths and a uniform font size for all child labels.</summary>
         public void Apply()
@@ -72,8 +84,10 @@ namespace Blackjack.UI
 
         private void ApplyUniformButtonWidth(TMP_Text[] labels)
         {
-            float textWidth = MeasureReferenceTextWidth(labels);
-            float buttonWidth = textWidth + horizontalPadding * 2f;
+            TMP_Text sizingLabel = GetSizingLabel(labels);
+            float textWidth = sizingLabel.GetPreferredValues().x;
+            float sidePadding = GetSidePadding(sizingLabel);
+            float buttonWidth = textWidth + sidePadding * 2f;
 
             foreach (Transform child in transform)
             {
@@ -82,16 +96,32 @@ namespace Blackjack.UI
             }
         }
 
-        private float MeasureReferenceTextWidth(TMP_Text[] labels)
+        private TMP_Text GetSizingLabel(TMP_Text[] labels)
         {
             if (referenceLabel != null)
-                return referenceLabel.GetPreferredValues().x;
+                return referenceLabel;
 
-            float widest = 0f;
+            TMP_Text widest = labels[0];
+            float widestWidth = 0f;
             foreach (TMP_Text label in labels)
-                widest = Mathf.Max(widest, label.GetPreferredValues().x);
+            {
+                float width = label.GetPreferredValues().x;
+                if (width > widestWidth)
+                {
+                    widestWidth = width;
+                    widest = label;
+                }
+            }
 
             return widest;
+        }
+
+        private float GetSidePadding(TMP_Text sizingLabel)
+        {
+            if (!useLetterPadding)
+                return horizontalPadding;
+
+            return sizingLabel.GetPreferredValues("M").x * letterPaddingCount;
         }
     }
 }

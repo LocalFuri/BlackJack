@@ -297,22 +297,59 @@ namespace Blackjack
         public void CloseMenu(bool playSound = true) => menuController?.CloseMenu(playSound);
 
         /// <summary>
-        /// Clears the post-Martingale capture guard after a chip-tray change.
-        /// Current Bet is menu-only; chip clicks do not update the canonical stake.
+        /// Syncs the menu Current Bet from chip-tray changes during the betting phase.
+        /// Skipped while Martingale has raised the table stake above the saved base bet.
         /// </summary>
         public void CapturePlayerInitialBet(int totalBet)
         {
             if (_martingaleDoubledLastPrepare)
                 _martingaleDoubledLastPrepare = false;
+
+            if (!IsBettingAllowed || totalBet <= 0)
+                return;
+
+            if (_inMartingaleMode)
+            {
+                int baseBet = menuController != null && menuController.SavedInitialBet > 0
+                    ? menuController.SavedInitialBet
+                    : (_initialBet > 0 ? _initialBet : chipBetting?.SmallestChipValue ?? 1);
+
+                if (totalBet > baseBet)
+                    return;
+            }
+
+            menuController?.UpdateSavedInitialBetFromGameplay(totalBet);
+            _initialBet = Mathf.Clamp(totalBet, chipBetting != null ? chipBetting.SmallestChipValue : 1, BetLimit);
         }
 
         /// <summary>
-        /// Player's chosen base stake (1–<see cref="BetLimit"/>), set only from the menu Current Bet field.
+        /// Player's chosen base stake (1–<see cref="BetLimit"/>), from the menu or chip tray.
         /// </summary>
         public int InitialBet
         {
             get => ResolveTargetInitialBet();
             set => _initialBet = Mathf.Clamp(value, chipBetting != null ? chipBetting.SmallestChipValue : 1, BetLimit);
+        }
+
+        /// <summary>
+        /// Rebuilds the chip tray from the menu Current Bet after the area was cleared.
+        /// Falls back to the smallest chip when no saved stake exists.
+        /// </summary>
+        private void RestoreInitialBetToBetAreaAfterClear()
+        {
+            if (chipBetting == null) return;
+
+            int savedInitialBet = menuController != null ? menuController.SavedInitialBet : 0;
+            if (savedInitialBet > 0)
+            {
+                InitialBet = savedInitialBet;
+                ApplySavedInitialBetToBetArea();
+            }
+            else
+            {
+                chipBetting.ResetToMinimumBet();
+                _initialBet = chipBetting.SmallestChipValue;
+            }
         }
 
         /// <summary>
@@ -519,18 +556,7 @@ namespace Blackjack
             _initialBet           = 0;
 
             chipBetting?.ClearBetArea();
-
-            int savedInitialBet = menuController != null ? menuController.SavedInitialBet : 0;
-            if (savedInitialBet > 0)
-            {
-                InitialBet = savedInitialBet;
-                ApplySavedInitialBetToBetArea();
-            }
-            else if (chipBetting != null)
-            {
-                chipBetting.ResetToMinimumBet();
-                _initialBet = chipBetting.SmallestChipValue;
-            }
+            RestoreInitialBetToBetAreaAfterClear();
 
             _playerMoney = 0;
             RefreshMoneyLabel();
@@ -649,6 +675,7 @@ namespace Blackjack
             _splitHandDoubledDown[1] = false;
 
             chipBetting?.ClearBetArea();
+            RestoreInitialBetToBetAreaAfterClear();
 
             _playerMoney = startingMoney;
             RefreshMoneyLabel();
@@ -2392,7 +2419,10 @@ namespace Blackjack
             else
             {
                 chipBetting?.RestoreBetFromSnapshot();
-                SyncBetAreaToInitialBetIfNeeded();
+                if (!_inMartingaleMode || CurrentBet <= ResolveTargetInitialBet())
+                    ApplySavedInitialBetToBetArea();
+                else
+                    SyncBetAreaToInitialBetIfNeeded();
             }
 
             // If fireworks or dealer natural-blackjack presentation is still playing, wait before
