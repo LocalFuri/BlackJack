@@ -1542,9 +1542,11 @@ namespace Blackjack
             else
                 yield return WaitForGameDelay(0.5f);
             if (_isSplitRound)
-                chipBetting?.SetBet(CurrentBet + extraBet, playSound: false);
+                chipBetting?.SetBet(CurrentBet + extraBet, playSound: true);
             else
-                chipBetting?.DoubleBetChips();
+                chipBetting?.DoubleBetChips(playSound: true);
+            if (chipSound.Length > 0f)
+                yield return WaitForGameDelay(chipSound.Length);
             yield return StartCoroutine(
                 DealCardTo(ActiveHand, ActiveViews,
                            _activeHandIndex == 0 ? playerCardArea : splitCardArea,
