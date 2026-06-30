@@ -2203,6 +2203,8 @@ namespace Blackjack
                 string[] labels = { "Hand 1", "Hand 2" };
 
                 int splitLossCount = 0;
+                int splitWinCount  = 0;
+                int splitWinTotalBet = 0;
 
                 for (int i = 0; i < hands.Length; i++)
                 {
@@ -2221,7 +2223,8 @@ namespace Blackjack
                     {
                         results.Add(ColorizeText($"{labels[i]}: Win", WinColor));
                         anyWin = true;
-                        ApplyPayout(PayoutResult.Win, handBet, refreshLabel: false);
+                        splitWinCount++;
+                        splitWinTotalBet += handBet;
                     }
                     else if (s < dealerScore)
                     {
@@ -2251,7 +2254,19 @@ namespace Blackjack
                     }
                 }
 
-                if (anyWin && !anyLoss) { StartCoroutine(PlayWinAndChipRoutine(useCelebration: _inMartingaleMode, playResetSound: _inMartingaleMode)); _playerWon = true; }
+                if (splitWinCount == 1)
+                    ApplyPayout(PayoutResult.Win, splitWinTotalBet, refreshLabel: false);
+
+                if (anyWin && !anyLoss)
+                {
+                    bool bothHandsWon = splitWinCount == 2;
+                    StartCoroutine(PlayWinAndChipRoutine(
+                        useCelebration: _inMartingaleMode,
+                        playResetSound: _inMartingaleMode,
+                        deferPayout: bothHandsWon,
+                        deferredBet: bothHandsWon ? splitWinTotalBet : 0));
+                    _playerWon = true;
+                }
                 else if (anyWin && anyLoss) { PlayTieSound(); RefreshMoneyLabel(); }
                 else if (anyLoss)           yield return StartCoroutine(PlayLoseSoundAndWait());
                 else                        PlayTieSound();
