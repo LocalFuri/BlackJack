@@ -3236,9 +3236,9 @@ namespace Blackjack
             if (playChipSound)
                 PlayGameSound(chipSound);
 
-            yield return WaitForSoundDuration(playChipSound ? chipSound.Length : 0f);
-
             ApplyWinBetAreaRestore();
+
+            yield return WaitForSoundDuration(playChipSound ? chipSound.Length : 0f);
 
             if (deferPayout && deferredBet > 0)
                 ApplyDeferredWinPayoutIfPending();
