@@ -1211,6 +1211,18 @@ namespace Blackjack
             yield return new WaitForSeconds(seconds);
         }
 
+        /// <summary>
+        /// Waits for a played clip to finish using real time so audio is not cut short
+        /// when <see cref="Time.timeScale"/> is raised (e.g. max-speed autoplay).
+        /// </summary>
+        private IEnumerator WaitForSoundDuration(float seconds)
+        {
+            if (SkipAutoplayDelays || seconds <= 0f)
+                yield break;
+
+            yield return new WaitForSecondsRealtime(seconds);
+        }
+
         /// <summary>Plays a gameplay sound unless max-speed auto-play is active.</summary>
         private void PlayGameSound(SoundEntry sound)
         {
@@ -3201,21 +3213,18 @@ namespace Blackjack
                     ApplyBlackjackGlow();
                     float celebrationDuration = PlayNaturalBlackjackSound();
                     SpawnFireworks(celebrationDuration);
-                    if (playResetSound)
-                        StartCoroutine(PlayResetSoundAfterDelay(celebrationDuration));
+                    yield return WaitForSoundDuration(celebrationDuration);
 
-                    if (celebrationDuration > 0f)
-                        yield return WaitForGameDelay(celebrationDuration);
-                    else
-                        yield return null;
+                    if (playResetSound)
+                    {
+                        PlayGameSound(resetSound);
+                        yield return WaitForSoundDuration(resetSound.Length);
+                    }
                 }
                 else
                 {
                     PlayWinSound();
-                    if (winSound.Length > 0f)
-                        yield return WaitForGameDelay(winSound.Length);
-                    else
-                        yield return null;
+                    yield return WaitForSoundDuration(winSound.Length);
                 }
             }
             else
@@ -3228,8 +3237,7 @@ namespace Blackjack
 
             ApplyWinBetAreaRestore();
 
-            if (playChipSound && chipSound.Length > 0f && !SkipAutoplayDelays)
-                yield return WaitForGameDelay(chipSound.Length);
+            yield return WaitForSoundDuration(playChipSound ? chipSound.Length : 0f);
 
             if (deferPayout && deferredBet > 0)
                 ApplyDeferredWinPayoutIfPending();
