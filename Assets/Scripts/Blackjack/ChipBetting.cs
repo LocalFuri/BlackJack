@@ -216,7 +216,7 @@ namespace Blackjack
             if (chipTypes.Count == 0) return;
 
             int typeIndex = 0;
-            chipSound.Play(audioSource);
+            PlayBetSound(chipSound);
             PlaceChip(typeIndex);
             CheckUpgrade(typeIndex);
             OnBetChanged?.Invoke(chipTypes[typeIndex].value);
@@ -253,7 +253,7 @@ namespace Blackjack
                 OnBetChanged?.Invoke(delta);
 
             if (playSound && delta > 0)
-                chipSound.Play(audioSource);
+                PlayBetSound(chipSound);
         }
 
         /// <summary>
@@ -374,7 +374,7 @@ namespace Blackjack
                         OnBetChanged?.Invoke(delta);
 
                     if (playSound && delta > 0 && notifyLimitExceeded)
-                        chipSound.Play(audioSource);
+                        PlayBetSound(chipSound);
 
                     return false;
                 }
@@ -401,7 +401,7 @@ namespace Blackjack
                 OnBetChanged?.Invoke(addedValue);
 
             if (playSound)
-                chipSound.Play(audioSource);
+                PlayBetSound(chipSound);
 
             RefreshBetLabel();
             return true;
@@ -444,7 +444,7 @@ namespace Blackjack
             if (TotalBet <= 0)
                 blackjackGame?.PlayKnockSound();
             else
-                chipResetSound.Play(audioSource);
+                PlayBetSound(chipResetSound);
 
             blackjackGame?.ClearBetLimitStatus();
             ClearBetArea();
@@ -477,7 +477,7 @@ namespace Blackjack
             }
 
             int previousBet = TotalBet;
-            chipResetSound.Play(audioSource);
+            PlayBetSound(chipResetSound);
             RestoreBet(maxBet);
 
             int delta = TotalBet - previousBet;
@@ -524,7 +524,7 @@ namespace Blackjack
                 return;
             }
 
-            chipSound.Play(audioSource);
+            PlayBetSound(chipSound);
             PlaceChip(typeIndex);
             CheckUpgrade(typeIndex);
             OnBetChanged?.Invoke(chipValue);
@@ -561,7 +561,7 @@ namespace Blackjack
             // Never allow the bet to drop below 1 chip (the smallest denomination).
             if (TotalBet - chipValue < SmallestChipValue) return;
 
-            chipSound.Play(audioSource);
+            PlayBetSound(chipSound);
             RemoveTopChips(typeIndex, 1);
             OnBetChanged?.Invoke(-chipValue);
             RefreshBetLabel();
@@ -715,6 +715,21 @@ namespace Blackjack
                     stack[s].GetComponent<RectTransform>().anchoredPosition = new Vector2(x, s * stackOffsetY);
                 }
             }
+        }
+
+        // ──────────────────────────────────────────────────────────────────────
+        // Audio
+        // ──────────────────────────────────────────────────────────────────────
+
+        private void PlayBetSound(SoundEntry sound)
+        {
+            if (blackjackGame != null && !blackjackGame.ShouldPlayGameplaySounds)
+                return;
+
+            if (!sound.HasClip || audioSource == null)
+                return;
+
+            sound.Play(audioSource);
         }
 
         // ──────────────────────────────────────────────────────────────────────

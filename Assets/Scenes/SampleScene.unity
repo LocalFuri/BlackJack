@@ -3952,7 +3952,7 @@ MonoBehaviour:
     volume: 0.49
   trythatagainSound:
     clip: {fileID: 8300000, guid: d4f4a8b5e7b3f83489ce6c9f97d49bae, type: 3}
-    volume: 0.55
+    volume: 0.3
   unbelievableSound:
     clip: {fileID: 8300000, guid: 046c3919105f9f54ba4456bcdadd154e, type: 3}
     volume: 0.52
@@ -3976,7 +3976,7 @@ MonoBehaviour:
     volume: 0.54
   youwillfryinhellSound:
     clip: {fileID: 8300000, guid: fcf60545ee5039f4a88dd52ea7284c58, type: 3}
-    volume: 0.48
+    volume: 0.28
   youwillpayforthatSound:
     clip: {fileID: 8300000, guid: cf7408d77d3ec5949bba557217cd68e9, type: 3}
     volume: 0.54

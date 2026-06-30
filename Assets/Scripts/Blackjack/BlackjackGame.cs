@@ -286,6 +286,9 @@ namespace Blackjack
         /// <summary>True while auto-play mode is active.</summary>
         public bool IsAutoPlayEnabled => _autoPlayEnabled;
 
+        /// <summary>False while max-speed autoplay is active — table gameplay sounds are suppressed.</summary>
+        public bool ShouldPlayGameplaySounds => !SkipAutoplayDelays;
+
         /// <summary>True while the developer menu is open. Used by <see cref="ChipBetting"/> to suppress chip input.</summary>
         public bool IsMenuOpen => menuController != null && menuController.IsMenuOpen;
 
@@ -2273,9 +2276,10 @@ namespace Blackjack
                 {
                     bool bothHandsWon = splitWinCount == 2;
                     StartCoroutine(PlayWinAndChipRoutine(
-                        useCelebration: _inMartingaleMode,
-                        playResetSound: _inMartingaleMode,
+                        useCelebration: !bothHandsWon && _inMartingaleMode,
+                        playResetSound: !bothHandsWon && _inMartingaleMode,
                         deferPayout: bothHandsWon,
+                        deferredPayout: PayoutResult.Win,
                         deferredBet: bothHandsWon ? splitWinTotalBet : 0));
                     _playerWon = true;
                 }
@@ -3188,7 +3192,7 @@ namespace Blackjack
         /// restores the bet area, and plays chip sound.
         /// Pass <paramref name="useCelebration"/> for Martingale wins and natural blackjacks.
         /// Pass <paramref name="playResetSound"/> only for Martingale wins.
-        /// When <paramref name="deferPayout"/> is true, <see cref="ApplyPayout"/> runs after celebration audio/fireworks.
+        /// When <paramref name="deferPayout"/> is true, <see cref="ApplyPayout"/> runs after win and chip audio.
         /// </summary>
         private IEnumerator PlayWinAndChipRoutine(
             bool useCelebration = false,
@@ -3202,9 +3206,6 @@ namespace Blackjack
 
             if (deferPayout && deferredBet > 0)
                 RegisterDeferredWinPayout(deferredPayout, deferredBet);
-
-            if (SkipAutoplayDelays)
-                ApplyDeferredWinPayoutIfPending();
 
             if (!SkipAutoplayDelays)
             {
@@ -3235,9 +3236,9 @@ namespace Blackjack
             if (playChipSound)
                 PlayGameSound(chipSound);
 
-            ApplyWinBetAreaRestore();
-
             yield return WaitForSoundDuration(playChipSound ? chipSound.Length : 0f);
+
+            ApplyWinBetAreaRestore();
 
             if (deferPayout && deferredBet > 0)
                 ApplyDeferredWinPayoutIfPending();
