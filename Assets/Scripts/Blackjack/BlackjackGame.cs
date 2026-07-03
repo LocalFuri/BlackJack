@@ -1446,7 +1446,7 @@ namespace Blackjack
                 yield break;
             }
 
-            if (ShouldAutoStand(_playerHand))
+            if (ShouldAutoStandNow(_playerHand))
             {
                 PlayGameSound(knockSound);
                 yield return WaitForGameDelay(0.3f);
@@ -1526,7 +1526,7 @@ namespace Blackjack
                 yield break;
             }
 
-            if (ShouldAutoStand(ActiveHand))
+            if (ShouldAutoStandNow(ActiveHand))
             {
                 PlayGameSound(knockSound);
                 yield return WaitForGameDelay(0.3f);
@@ -1622,7 +1622,7 @@ namespace Blackjack
                     yield return WaitForGameDelay(0.3f);
                     yield return StartCoroutine(AutoHitLoop());
                 }
-                else if (ShouldAutoStand(ActiveHand))
+                else if (ShouldAutoStandNow(ActiveHand))
                 {
                     PlayGameSound(knockSound);
                     yield return WaitForGameDelay(0.3f);
@@ -1643,7 +1643,7 @@ namespace Blackjack
                 yield return StartCoroutine(PlayerHit());
 
                 int score = ActiveHand.BestValue();
-                if (score > BlackjackValue || score == BlackjackValue || ShouldAutoStand(ActiveHand))
+                if (score > BlackjackValue || score == BlackjackValue || ShouldAutoStandNow(ActiveHand))
                     yield break;
             }
         }
@@ -1683,7 +1683,7 @@ namespace Blackjack
                 yield break;
             }
 
-            if (score == BlackjackValue || ShouldAutoStand(ActiveHand))
+            if (score == BlackjackValue || ShouldAutoStandNow(ActiveHand))
             {
                 if (score != BlackjackValue)
                     PlayGameSound(knockSound);
@@ -3092,6 +3092,24 @@ namespace Blackjack
                 return score >= AutoStandSoft;
             return score >= AutoStandHard;
         }
+
+        private StrategyAction GetBasicStrategyRecommendation(Hand hand)
+        {
+            bool canSplit = !_isSplitRound && hand.Count == 2 &&
+                hand.Cards[0].Rank == hand.Cards[1].Rank;
+            bool canDouble = hand.Count == 2;
+            bool canSurrender = hand.Count == 2 && !_isSplitRound;
+            return BasicStrategyTable.GetRecommendation(
+                hand, _dealerUpcardSnapshot, canSplit, canDouble, canSurrender);
+        }
+
+        /// <summary>
+        /// Auto-stand threshold, but keeps control on two-card hands when basic strategy recommends double
+        /// (e.g. soft 19 vs dealer 6).
+        /// </summary>
+        private bool ShouldAutoStandNow(Hand hand) =>
+            ShouldAutoStand(hand) &&
+            !(hand.Count == 2 && GetBasicStrategyRecommendation(hand) == StrategyAction.Double);
 
         /// <summary>Creates the split score label by cloning the player score label and adds pulse components.</summary>
         private void InitSplitScoreLabel()
