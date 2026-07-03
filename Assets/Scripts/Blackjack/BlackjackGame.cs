@@ -2308,8 +2308,8 @@ namespace Blackjack
                 // Capture before RecordRoundOutcome clears _inMartingaleMode.
                 bool isMartingaleWin = _inMartingaleMode;
                 if      (IsNaturalBlackjack(_playerHand)) { StartCoroutine(PlayWinAndChipRoutine(useCelebration: true, playResetSound: isMartingaleWin, deferPayout: true, deferredPayout: PayoutResult.BlackjackWin, deferredBet: winBet)); RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor); }
-                else if (dealerBust)                    { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin));  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet, refreshLabel: false); }
-                else if (p > dealerScore)               { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin));  RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor);  ApplyPayout(PayoutResult.Win,  winBet, refreshLabel: false); }
+                else if (dealerBust)                    { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin, deferPayout: true, deferredBet: winBet)); RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor); }
+                else if (p > dealerScore)               { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin, deferPayout: true, deferredBet: winBet)); RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor); }
                 else if (dealerScore > p)
                 {
                     RecordRoundOutcome(true, lostAmount: stakedBet, scoreDelta: -1, lossCount: _doubleDownExtraBet > 0 ? 2 : 1);
@@ -2346,7 +2346,15 @@ namespace Blackjack
         /// (which calls <see cref="PrepareForBetting"/>) cannot override the restored amount with
         /// a stale split or double-down value. Returns true when the bet was restored.
         /// </summary>
-        private bool ApplyPendingWinBetRestore()
+        private void ApplyWinBetToArea(int targetBet, bool playChipSound)
+        {
+            if (playChipSound)
+                chipBetting.SetBetWithChipSound(targetBet);
+            else
+                chipBetting.SetBet(targetBet, playSound: false);
+        }
+
+        private bool ApplyPendingWinBetRestore(bool playChipSound = false)
         {
             if (chipBetting == null)
                 return false;
@@ -2359,7 +2367,7 @@ namespace Blackjack
 
             int targetBet = ResolveTargetInitialBet();
 
-            chipBetting.SetBet(targetBet, playSound: false);
+            ApplyWinBetToArea(targetBet, playChipSound);
             chipBetting.SnapshotBet();
             _betBeforeMartingale   = 0;
             _savedBetBeforeAction  = 0;
@@ -2374,7 +2382,7 @@ namespace Blackjack
         /// After a win following a double down, resets the bet area to the stake before the double.
         /// Returns true when the bet was restored (or was already restored this round).
         /// </summary>
-        private bool ApplyDoubleDownWinBetRestore()
+        private bool ApplyDoubleDownWinBetRestore(bool playChipSound = false)
         {
             if (chipBetting == null)
                 return false;
@@ -2385,7 +2393,7 @@ namespace Blackjack
             if (_doubleDownExtraBet <= 0 || _savedBetBeforeAction <= 0)
                 return false;
 
-            chipBetting.SetBet(ResolveTargetInitialBet(), playSound: false);
+            ApplyWinBetToArea(ResolveTargetInitialBet(), playChipSound);
             chipBetting.SnapshotBet();
             _savedBetBeforeAction  = 0;
             _doubleDownExtraBet    = 0;
@@ -2397,7 +2405,7 @@ namespace Blackjack
         /// After a normal win, resets the bet area to the player's chosen initial stake.
         /// Returns true when the bet was restored (or was already restored this round).
         /// </summary>
-        private bool ApplyStandardWinBetRestore()
+        private bool ApplyStandardWinBetRestore(bool playChipSound = false)
         {
             if (chipBetting == null)
                 return false;
@@ -2408,7 +2416,7 @@ namespace Blackjack
             if (!_playerWon)
                 return false;
 
-            chipBetting.SetBet(ResolveTargetInitialBet(), playSound: false);
+            ApplyWinBetToArea(ResolveTargetInitialBet(), playChipSound);
             chipBetting.SnapshotBet();
             _savedBetBeforeAction = 0;
             _doubleDownExtraBet   = 0;
@@ -2417,15 +2425,15 @@ namespace Blackjack
         }
 
         /// <summary>Tries Martingale restore, then double-down restore, then the player's initial bet.</summary>
-        private bool ApplyWinBetAreaRestore()
+        private bool ApplyWinBetAreaRestore(bool playChipSound = false)
         {
-            if (ApplyPendingWinBetRestore())
+            if (ApplyPendingWinBetRestore(playChipSound))
                 return true;
 
-            if (ApplyDoubleDownWinBetRestore())
+            if (ApplyDoubleDownWinBetRestore(playChipSound))
                 return true;
 
-            return ApplyStandardWinBetRestore();
+            return ApplyStandardWinBetRestore(playChipSound);
         }
 
         private IEnumerator EndRound()
@@ -3251,10 +3259,7 @@ namespace Blackjack
                 yield return null;
             }
 
-            if (playChipSound)
-                PlayGameSound(chipSound);
-
-            ApplyWinBetAreaRestore();
+            ApplyWinBetAreaRestore(playChipSound);
 
             yield return WaitForSoundDuration(playChipSound ? chipSound.Length : 0f);
 

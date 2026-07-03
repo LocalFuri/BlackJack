@@ -243,7 +243,7 @@ namespace Blackjack
         /// <see cref="OnBetChanged"/> with the signed delta so all listeners stay in sync.
         /// </summary>
         /// <param name="targetAmount">The desired total bet value.</param>
-        /// <param name="playSound">When true, plays <see cref="chipSound"/> if the bet increased (e.g. for Martingale auto-raise).</param>
+        /// <param name="playSound">When true, plays <see cref="chipSound"/> if the bet changed.</param>
         public void SetBet(int targetAmount, bool playSound = false)
         {
             int previousBet = TotalBet;
@@ -257,17 +257,35 @@ namespace Blackjack
         }
 
         /// <summary>
+        /// Rebuilds the bet area to <paramref name="targetAmount"/> and plays the chip sound
+        /// when the first replacement chip is placed (after the old stack is cleared).
+        /// </summary>
+        public void SetBetWithChipSound(int targetAmount)
+        {
+            int previousBet = TotalBet;
+            RestoreBet(targetAmount, playSoundOnFirstChip: targetAmount != previousBet);
+            int delta = TotalBet - previousBet;
+            if (delta != 0)
+                OnBetChanged?.Invoke(delta);
+        }
+
+        /// <summary>
         /// Rebuilds the bet area to represent exactly <paramref name="targetAmount"/> using
         /// the available chip denominations (greedy highest-first). Clears the current chips
         /// without firing <see cref="OnBetChanged"/>, then places the new chips silently and
         /// refreshes the bet sum label. Any remainder that cannot be represented exactly is
         /// ignored (e.g. odd amounts when only even denominations are available).
         /// </summary>
-        public void RestoreBet(int targetAmount)
+        /// <param name="playSoundOnFirstChip">
+        /// When true, plays <see cref="chipSound"/> as the first new chip appears (win restore).
+        /// </param>
+        public void RestoreBet(int targetAmount, bool playSoundOnFirstChip = false)
         {
             if (chipTypes.Count == 0 || targetAmount <= 0) return;
 
             ClearAllBetChips();
+
+            bool playedSound = false;
 
             // Greedy decomposition: highest denomination first
             int remaining = targetAmount;
@@ -280,7 +298,14 @@ namespace Blackjack
                 remaining -= count * denomination;
 
                 for (int j = 0; j < count; j++)
+                {
                     PlaceChip(i);
+                    if (playSoundOnFirstChip && !playedSound)
+                    {
+                        PlayBetSound(chipSound);
+                        playedSound = true;
+                    }
+                }
             }
 
             RefreshBetLabel();
