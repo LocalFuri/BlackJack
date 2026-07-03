@@ -164,6 +164,8 @@ namespace Blackjack
         [SerializeField] private float doubleDownBetPause = 0.6f;
         [SerializeField] private float endRoundDelay      = 3.0f;
         [SerializeField] private float newRoundPause      = 0.5f;
+        [Tooltip("Extra realtime seconds after win/celebration audio before the bet stack is restored.")]
+        [SerializeField] private float winSoundTailBuffer = 0.1f;
 
         [Header("Controls")]
         [SerializeField] private KeyboardControls controls;
@@ -295,6 +297,9 @@ namespace Blackjack
         /// <summary>True while an active Martingale run is in progress (after popup confirm until a win).</summary>
         public bool IsInMartingaleMode => _inMartingaleMode;
 
+        /// <summary>True while win audio is playing and the bet stack must stay unchanged.</summary>
+        public bool IsWinPresentationActive => _playerWon && !_winPresentationComplete;
+
         /// <summary>Closes the menu panel. Used by <see cref="ChipBetting"/> when a bet action is taken during the betting phase.</summary>
         /// <param name="playSound">When false, suppresses the close sound. Defaults to true.</param>
         public void CloseMenu(bool playSound = true) => menuController?.CloseMenu(playSound);
@@ -363,6 +368,7 @@ namespace Blackjack
         {
             if (chipBetting == null) return;
             if (_state != GameState.Idle && _state != GameState.RoundOver) return;
+            if (IsWinPresentationActive) return;
 
             SyncBetAreaToInitialBetIfNeeded(force: true);
         }
@@ -389,6 +395,7 @@ namespace Blackjack
         private void SyncBetAreaToInitialBetIfNeeded(bool force = false)
         {
             if (chipBetting == null) return;
+            if (IsWinPresentationActive) return;
             if (!force)
             {
                 if (_martingaleDoubledLastPrepare) return;
@@ -609,6 +616,7 @@ namespace Blackjack
         public void PrepareForBetting()
         {
             if (_state != GameState.RoundOver) return;
+            if (IsWinPresentationActive) return;
 
             DestroyCardViews(_playerCardViews);
             DestroyCardViews(_splitCardViews);
@@ -1205,6 +1213,13 @@ namespace Blackjack
         /// <summary>When true, timed waits and sound-length waits are skipped during auto-play.</summary>
         private bool SkipAutoplayDelays => _autoPlayEnabled && _autoplayMaxSpeed;
 
+        /// <summary>Clip length plus tail buffer so restore waits until win audio is fully audible.</summary>
+        private float WinSoundWaitDuration(SoundEntry sound) =>
+            sound.HasClip ? sound.Length + winSoundTailBuffer : 0f;
+
+        private float WinSoundWaitDuration(float clipLength) =>
+            clipLength > 0f ? clipLength + winSoundTailBuffer : 0f;
+
         /// <summary>Yields for <paramref name="seconds"/> unless max-speed auto-play is active.</summary>
         private IEnumerator WaitForGameDelay(float seconds)
         {
@@ -1387,14 +1402,13 @@ namespace Blackjack
                 {
                     // Capture before RecordRoundOutcome clears _inMartingaleMode.
                     bool isMartingaleNaturalBJ = _inMartingaleMode;
-                    StartCoroutine(PlayWinAndChipRoutine(
+                    StartWinPresentation(
                         useCelebration: true,
                         playResetSound: isMartingaleNaturalBJ,
                         deferPayout: true,
                         deferredPayout: PayoutResult.BlackjackWin,
-                        deferredBet: CurrentBet));
+                        deferredBet: CurrentBet);
                     RecordRoundOutcome(false, scoreDelta: +1);
-                    _playerWon = true;
                     SetStatus(isMartingaleNaturalBJ ? "Won with Martingale" : "You win", WinColor);
                 }
 
@@ -2275,13 +2289,12 @@ namespace Blackjack
                 if (anyWin && !anyLoss)
                 {
                     bool bothHandsWon = splitWinCount == 2;
-                    StartCoroutine(PlayWinAndChipRoutine(
+                    StartWinPresentation(
                         useCelebration: !bothHandsWon && _inMartingaleMode,
                         playResetSound: !bothHandsWon && _inMartingaleMode,
                         deferPayout: bothHandsWon,
                         deferredPayout: PayoutResult.Win,
-                        deferredBet: bothHandsWon ? splitWinTotalBet : 0));
-                    _playerWon = true;
+                        deferredBet: bothHandsWon ? splitWinTotalBet : 0);
                 }
                 else if (anyWin && anyLoss) { PlayTieSound(); RefreshMoneyLabel(); }
                 else if (anyLoss)           yield return StartCoroutine(PlayLoseSoundAndWait());
@@ -2307,9 +2320,9 @@ namespace Blackjack
                 int winBet = stakedBet;
                 // Capture before RecordRoundOutcome clears _inMartingaleMode.
                 bool isMartingaleWin = _inMartingaleMode;
-                if      (IsNaturalBlackjack(_playerHand)) { StartCoroutine(PlayWinAndChipRoutine(useCelebration: true, playResetSound: isMartingaleWin, deferPayout: true, deferredPayout: PayoutResult.BlackjackWin, deferredBet: winBet)); RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor); }
-                else if (dealerBust)                    { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin, deferPayout: true, deferredBet: winBet)); RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor); }
-                else if (p > dealerScore)               { StartCoroutine(PlayWinAndChipRoutine(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin, deferPayout: true, deferredBet: winBet)); RecordRoundOutcome(false, scoreDelta: +1); _playerWon = true; SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor); }
+                if      (IsNaturalBlackjack(_playerHand)) { StartWinPresentation(useCelebration: true, playResetSound: isMartingaleWin, deferPayout: true, deferredPayout: PayoutResult.BlackjackWin, deferredBet: winBet); RecordRoundOutcome(false, scoreDelta: +1); SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor); }
+                else if (dealerBust)                    { StartWinPresentation(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin, deferPayout: true, deferredBet: winBet); RecordRoundOutcome(false, scoreDelta: +1); SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor); }
+                else if (p > dealerScore)               { StartWinPresentation(useCelebration: isMartingaleWin, playResetSound: isMartingaleWin, deferPayout: true, deferredBet: winBet); RecordRoundOutcome(false, scoreDelta: +1); SetStatus(isMartingaleWin ? "Won with Martingale" : "You win", WinColor); }
                 else if (dealerScore > p)
                 {
                     RecordRoundOutcome(true, lostAmount: stakedBet, scoreDelta: -1, lossCount: _doubleDownExtraBet > 0 ? 2 : 1);
@@ -2349,9 +2362,9 @@ namespace Blackjack
         private void ApplyWinBetToArea(int targetBet, bool playChipSound)
         {
             if (playChipSound)
-                chipBetting.SetBetWithChipSound(targetBet);
+                chipBetting.SetBetWithChipSound(targetBet, allowDuringWinPresentation: true);
             else
-                chipBetting.SetBet(targetBet, playSound: false);
+                chipBetting.SetBet(targetBet, playSound: false, allowDuringWinPresentation: true);
         }
 
         private bool ApplyPendingWinBetRestore(bool playChipSound = false)
@@ -2443,8 +2456,6 @@ namespace Blackjack
             strategyTableUI?.ClearHighlight();
 
             yield return WaitForGameDelay(endRoundDelay);
-            chipBetting?.ResetMaxBet();
-            chipBetting?.ClampBetToMaxBet();
 
             if (_playerWon)
             {
@@ -2453,12 +2464,17 @@ namespace Blackjack
 
                 ApplyWinBetAreaRestore();
 
+                chipBetting?.ResetMaxBet();
+                chipBetting?.ClampBetToMaxBet();
+
                 float chipRemaining = _winSoundEndTime - Time.time;
                 if (chipRemaining > 0f)
                     yield return WaitForGameDelay(chipRemaining);
             }
             else
             {
+                chipBetting?.ResetMaxBet();
+                chipBetting?.ClampBetToMaxBet();
                 chipBetting?.RestoreBetFromSnapshot();
                 if (!_inMartingaleMode || CurrentBet <= ResolveTargetInitialBet())
                     ApplySavedInitialBetToBetArea();
@@ -3213,6 +3229,31 @@ namespace Blackjack
             }
         }
 
+        /// <summary>Arms win presentation before audio so the bet stack stays locked immediately.</summary>
+        private void BeginWinPresentation()
+        {
+            _playerWon = true;
+            _winPresentationComplete = false;
+        }
+
+        private void StartWinPresentation(
+            bool useCelebration = false,
+            bool playResetSound = false,
+            bool playChipSound = true,
+            bool deferPayout = false,
+            PayoutResult deferredPayout = PayoutResult.Win,
+            int deferredBet = 0)
+        {
+            BeginWinPresentation();
+            StartCoroutine(PlayWinAndChipRoutine(
+                useCelebration,
+                playResetSound,
+                playChipSound,
+                deferPayout,
+                deferredPayout,
+                deferredBet));
+        }
+
         /// <summary>
         /// Plays win audio, waits for it to finish, then updates balance (immediately or via deferred payout),
         /// restores the bet area, and plays chip sound.
@@ -3240,18 +3281,18 @@ namespace Blackjack
                     ApplyBlackjackGlow();
                     float celebrationDuration = PlayNaturalBlackjackSound();
                     SpawnFireworks(celebrationDuration);
-                    yield return WaitForSoundDuration(celebrationDuration);
+                    yield return WaitForSoundDuration(WinSoundWaitDuration(celebrationDuration));
 
                     if (playResetSound)
                     {
                         PlayGameSound(resetSound);
-                        yield return WaitForSoundDuration(resetSound.Length);
+                        yield return WaitForSoundDuration(WinSoundWaitDuration(resetSound));
                     }
                 }
                 else
                 {
                     PlayWinSound();
-                    yield return WaitForSoundDuration(winSound.Length);
+                    yield return WaitForSoundDuration(WinSoundWaitDuration(winSound));
                 }
             }
             else

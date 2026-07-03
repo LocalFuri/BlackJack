@@ -179,6 +179,7 @@ namespace Blackjack
         /// </summary>
         public void ClampBetToMaxBet()
         {
+            if (IsBetAreaLocked()) return;
           if (TotalBet <= maxBet) return;
           int removed = 0;
         
@@ -244,10 +245,13 @@ namespace Blackjack
         /// </summary>
         /// <param name="targetAmount">The desired total bet value.</param>
         /// <param name="playSound">When true, plays <see cref="chipSound"/> if the bet changed.</param>
-        public void SetBet(int targetAmount, bool playSound = false)
+        /// <param name="allowDuringWinPresentation">When true, allows win-restore to rebuild the stack during harp.</param>
+        public void SetBet(int targetAmount, bool playSound = false, bool allowDuringWinPresentation = false)
         {
+            if (IsBetAreaLocked(allowDuringWinPresentation)) return;
+
             int previousBet = TotalBet;
-            RestoreBet(targetAmount);
+            RestoreBet(targetAmount, playSoundOnFirstChip: false, allowDuringWinPresentation: allowDuringWinPresentation);
             int delta = TotalBet - previousBet;
             if (delta != 0)
                 OnBetChanged?.Invoke(delta);
@@ -258,12 +262,14 @@ namespace Blackjack
 
         /// <summary>
         /// Rebuilds the bet area to <paramref name="targetAmount"/> and plays the chip sound
-        /// when the first replacement chip is placed (after the old stack is cleared).
+        /// in the same moment the old stack is cleared and the first replacement chip appears.
         /// </summary>
-        public void SetBetWithChipSound(int targetAmount)
+        public void SetBetWithChipSound(int targetAmount, bool allowDuringWinPresentation = false)
         {
+            if (IsBetAreaLocked(allowDuringWinPresentation)) return;
+
             int previousBet = TotalBet;
-            RestoreBet(targetAmount, playSoundOnFirstChip: targetAmount != previousBet);
+            RestoreBet(targetAmount, playSoundOnFirstChip: targetAmount != previousBet, allowDuringWinPresentation: allowDuringWinPresentation);
             int delta = TotalBet - previousBet;
             if (delta != 0)
                 OnBetChanged?.Invoke(delta);
@@ -272,20 +278,22 @@ namespace Blackjack
         /// <summary>
         /// Rebuilds the bet area to represent exactly <paramref name="targetAmount"/> using
         /// the available chip denominations (greedy highest-first). Clears the current chips
-        /// without firing <see cref="OnBetChanged"/>, then places the new chips silently and
-        /// refreshes the bet sum label. Any remainder that cannot be represented exactly is
-        /// ignored (e.g. odd amounts when only even denominations are available).
+        /// without firing <see cref="OnBetChanged"/>, then places the new chips and refreshes
+        /// the bet sum label. Any remainder that cannot be represented exactly is ignored.
         /// </summary>
         /// <param name="playSoundOnFirstChip">
-        /// When true, plays <see cref="chipSound"/> as the first new chip appears (win restore).
+        /// When true, keeps the current stack visible until the first new chip is placed, then
+        /// plays <see cref="chipSound"/>, clears the old stack, and places that chip in one step.
         /// </param>
-        public void RestoreBet(int targetAmount, bool playSoundOnFirstChip = false)
+        public void RestoreBet(int targetAmount, bool playSoundOnFirstChip = false, bool allowDuringWinPresentation = false)
         {
+            if (IsBetAreaLocked(allowDuringWinPresentation)) return;
             if (chipTypes.Count == 0 || targetAmount <= 0) return;
 
-            ClearAllBetChips();
+            if (!playSoundOnFirstChip)
+                ClearAllBetChips();
 
-            bool playedSound = false;
+            bool cleared = !playSoundOnFirstChip;
 
             // Greedy decomposition: highest denomination first
             int remaining = targetAmount;
@@ -299,14 +307,19 @@ namespace Blackjack
 
                 for (int j = 0; j < count; j++)
                 {
-                    PlaceChip(i);
-                    if (playSoundOnFirstChip && !playedSound)
+                    if (playSoundOnFirstChip && !cleared)
                     {
                         PlayBetSound(chipSound);
-                        playedSound = true;
+                        ClearAllBetChips();
+                        cleared = true;
                     }
+
+                    PlaceChip(i);
                 }
             }
+
+            if (!cleared)
+                ClearAllBetChips();
 
             RefreshBetLabel();
         }
@@ -333,6 +346,7 @@ namespace Blackjack
         /// </summary>
         public void RestoreBetFromSnapshot()
         {
+            if (IsBetAreaLocked()) return;
             if (_snapshotColumnOrder.Count == 0) return;
 
             // Clear existing chips silently (no event)
@@ -373,6 +387,7 @@ namespace Blackjack
         /// <returns>False when <paramref name="enforceMaxBet"/> is true and the bet limit was reached.</returns>
         public bool DoubleBetChips(bool playSound = false, bool enforceMaxBet = false, bool notifyLimitExceeded = true)
         {
+            if (IsBetAreaLocked()) return true;
             if (_columnOrder.Count == 0) return true;
 
             if (enforceMaxBet)
@@ -435,6 +450,8 @@ namespace Blackjack
         /// <summary>Removes all chips from the bet area and resets state.</summary>
         public void ClearBetArea()
         {
+            if (IsBetAreaLocked()) return;
+
             int refund = TotalBet;
 
             ClearAllBetChips();
@@ -449,8 +466,16 @@ namespace Blackjack
         // Chip placement
         // ──────────────────────────────────────────────────────────────────────
 
+        private bool IsBetAreaLocked(bool allowDuringWinPresentation = false) =>
+            !allowDuringWinPresentation
+            && blackjackGame != null
+            && blackjackGame.IsWinPresentationActive;
+
         private void OnChipResetClicked()
         {
+            if (blackjackGame != null && blackjackGame.IsWinPresentationActive)
+                return;
+
             if (blackjackGame != null)
             {
                 if (blackjackGame.IsMenuOpen)
@@ -477,6 +502,9 @@ namespace Blackjack
 
         private void OnChipMaxClicked()
         {
+            if (blackjackGame != null && blackjackGame.IsWinPresentationActive)
+                return;
+
             if (blackjackGame != null)
             {
                 if (blackjackGame.IsMenuOpen)
@@ -522,6 +550,9 @@ namespace Blackjack
         private void OnChipClicked(int typeIndex)
         {
             if (typeIndex < 0 || typeIndex >= chipTypes.Count) return;
+
+            if (blackjackGame != null && blackjackGame.IsWinPresentationActive)
+                return;
 
             if (blackjackGame != null)
             {
