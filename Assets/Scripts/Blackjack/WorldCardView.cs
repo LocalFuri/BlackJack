@@ -175,14 +175,14 @@ namespace Blackjack
             _cardMaterial.color = Color.white;
         }
 
-        public void Flip(bool toFaceUp, Action onComplete = null)
+        public void Flip(bool toFaceUp, Action onComplete = null, Action onFaceRevealed = null)
         {
             if (_flipCoroutine != null)
                 StopCoroutine(_flipCoroutine);
-            _flipCoroutine = StartCoroutine(FlipRoutine(toFaceUp, onComplete));
+            _flipCoroutine = StartCoroutine(FlipRoutine(toFaceUp, onComplete, onFaceRevealed));
         }
 
-        private IEnumerator FlipRoutine(bool toFaceUp, Action onComplete)
+        private IEnumerator FlipRoutine(bool toFaceUp, Action onComplete, Action onFaceRevealed)
         {
             Vector3 scale = transform.localScale;
             if (scale.x == 0f)
@@ -200,6 +200,7 @@ namespace Blackjack
             transform.localScale = new Vector3(0f, scale.y, scale.z);
             _isFaceUp = toFaceUp;
             Setup(_faceSprite, _backSprite, toFaceUp);
+            onFaceRevealed?.Invoke();
 
             for (float t = 0f; t < half; t += Time.deltaTime)
             {

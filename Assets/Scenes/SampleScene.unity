@@ -3916,7 +3916,7 @@ MonoBehaviour:
     volume: 0.47
   knockSound:
     clip: {fileID: 8300000, guid: babd8fa50fa977f4881b58111a1ab364, type: 3}
-    volume: 0.47
+    volume: 0.563
   loseSound:
     clip: {fileID: 8300000, guid: d2d47448e3808304fb70067a429664b8, type: 3}
     volume: 0.55

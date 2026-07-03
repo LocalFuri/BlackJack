@@ -2537,9 +2537,8 @@ namespace Blackjack
 
             CardData card = _deck.Draw();
 
-            PlayGameSound(dealCardSound);
-
-            ICardDisplay view = SpawnCardView(card, area, faceUp: SkipAutoplayDelays && faceUp);
+            bool instantFaceUp = faceUp && SkipAutoplayDelays;
+            ICardDisplay view = SpawnCardView(card, area, faceUp: instantFaceUp);
             if (view == null)
                 yield break;
 
@@ -2549,8 +2548,15 @@ namespace Blackjack
             if (faceUp && !SkipAutoplayDelays)
             {
                 bool flipDone = false;
-                view.Flip(toFaceUp: true, () => flipDone = true);
+                view.Flip(
+                    toFaceUp: true,
+                    onComplete: () => flipDone = true,
+                    onFaceRevealed: () => PlayGameSound(dealCardSound));
                 yield return new WaitUntil(() => flipDone);
+            }
+            else
+            {
+                PlayGameSound(dealCardSound);
             }
         }
 
@@ -2707,11 +2713,15 @@ namespace Blackjack
             if (SkipAutoplayDelays)
             {
                 _dealerHoleCardView.SetFaceUpImmediate(true);
+                PlayGameSound(dealCardSound);
                 yield break;
             }
 
             bool done = false;
-            _dealerHoleCardView.Flip(toFaceUp: true, () => done = true);
+            _dealerHoleCardView.Flip(
+                toFaceUp: true,
+                onComplete: () => done = true,
+                onFaceRevealed: () => PlayGameSound(dealCardSound));
             yield return new WaitUntil(() => done);
         }
 

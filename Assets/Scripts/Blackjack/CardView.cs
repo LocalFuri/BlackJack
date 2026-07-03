@@ -67,13 +67,13 @@ namespace Blackjack
             glowImage.preserveAspect = true;
         }
 
-        public void Flip(bool toFaceUp, System.Action onComplete = null)
+        public void Flip(bool toFaceUp, System.Action onComplete = null, System.Action onFaceRevealed = null)
         {
             if (_flipCoroutine != null) StopCoroutine(_flipCoroutine);
-            _flipCoroutine = StartCoroutine(FlipRoutine(toFaceUp, onComplete));
+            _flipCoroutine = StartCoroutine(FlipRoutine(toFaceUp, onComplete, onFaceRevealed));
         }
 
-        private IEnumerator FlipRoutine(bool toFaceUp, System.Action onComplete)
+        private IEnumerator FlipRoutine(bool toFaceUp, System.Action onComplete, System.Action onFaceRevealed)
         {
             RectTransform rt        = GetComponent<RectTransform>();
             Vector3       origScale = rt.localScale;
@@ -92,6 +92,7 @@ namespace Blackjack
             _isFaceUp        = toFaceUp;
             cardImage.sprite = toFaceUp ? _faceSprite : _backSprite;
             SyncGlowSprite();
+            onFaceRevealed?.Invoke();
 
             elapsed = 0f;
             while (elapsed < half)
