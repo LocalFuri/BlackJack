@@ -353,11 +353,6 @@ namespace Blackjack
                 InitialBet = savedInitialBet;
                 ApplySavedInitialBetToBetArea();
             }
-            else
-            {
-                chipBetting.ResetToMinimumBet();
-                _initialBet = chipBetting.SmallestChipValue;
-            }
         }
 
         /// <summary>
@@ -374,17 +369,29 @@ namespace Blackjack
         }
 
         /// <summary>
-        /// Returns the menu Current Bet when available; otherwise the cached or minimum stake.
+        /// Returns the menu Current Bet when available; otherwise the cached stake, or 0 when unset.
         /// </summary>
         private int ResolveTargetInitialBet()
         {
-            if (menuController != null && menuController.SavedInitialBet > 0)
-                return menuController.SavedInitialBet;
+            if (menuController != null)
+                return Mathf.Max(0, menuController.SavedInitialBet);
 
             if (_initialBet > 0)
                 return _initialBet;
 
-            return chipBetting != null ? chipBetting.SmallestChipValue : 1;
+            return 0;
+        }
+
+        /// <summary>
+        /// Clears the saved base stake (menu Current Bet and cached value) to 0.
+        /// Called by the chip-tray reset button so the next deal does not auto-restore a prior bet.
+        /// </summary>
+        public void ClearStoredBet()
+        {
+            _initialBet = 0;
+            _betBeforeMartingale = 0;
+            _savedBetBeforeAction = 0;
+            menuController?.ClearSavedInitialBet();
         }
 
         /// <summary>
@@ -968,6 +975,14 @@ namespace Blackjack
             _savedBetBeforeAction = 0;
             EnsureMinimumBet();
 
+            if (chipBetting == null || CurrentBet <= 0)
+            {
+                dealButton.gameObject.SetActive(true);
+                if (_state == GameState.Idle)
+                    SetStatus("Place your bet");
+                return;
+            }
+
             if (_martingaleDoubledLastPrepare)
                 _martingaleDoubledLastPrepare = false;
 
@@ -1009,7 +1024,16 @@ namespace Blackjack
             }
 
             if (chipBetting.TotalBet <= 0)
-                chipBetting.SetBet(ResolveTargetInitialBet(), playSound: false);
+            {
+                int targetBet = ResolveTargetInitialBet();
+                if (targetBet > 0)
+                    chipBetting.SetBet(targetBet, playSound: false);
+                else
+                    chipBetting.ResetToMinimumBet();
+
+                if (chipBetting.TotalBet > 0)
+                    CapturePlayerInitialBet(chipBetting.TotalBet);
+            }
             else
                 SyncBetAreaToInitialBetIfNeeded();
         }

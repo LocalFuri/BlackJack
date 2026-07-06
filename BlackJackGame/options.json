@@ -1,0 +1,19 @@
+{
+    "blackjackTestEnabled": false,
+    "bjAllEnabled": false,
+    "ddTestEnabled": false,
+    "testSplitEnabled": false,
+    "autoplayEnabled": false,
+    "autoplayMaxSpeed": false,
+    "dealerBjTestEnabled": false,
+    "testSplitRank": 2,
+    "overrideStrategyEnabled": false,
+    "alwaysLoseEnabled": false,
+    "volume": 1.0,
+    "martingaleThreshold": 0,
+    "martingaleActive": false,
+    "martingaleAutoPlay": false,
+    "showStrategyEnabled": true,
+    "handsDealt": 6,
+    "initialBet": 1
+}

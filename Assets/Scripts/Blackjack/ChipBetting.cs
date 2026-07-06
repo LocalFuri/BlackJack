@@ -497,6 +497,7 @@ namespace Blackjack
                 PlayBetSound(chipResetSound);
 
             blackjackGame?.ClearBetLimitStatus();
+            blackjackGame?.ClearStoredBet();
             ClearBetArea();
         }
 

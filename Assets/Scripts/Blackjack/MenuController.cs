@@ -1360,9 +1360,11 @@ namespace Blackjack
             var input = GetCurrentBetInputField();
             if (input == null || _settings == null) return;
 
-            int bet = ClampCurrentBet(_settings.initialBet > 0 ? _settings.initialBet : 1);
             _suppressCurrentBetInputCallbacks = true;
-            input.SetTextWithoutNotify(FormatCurrentBetGerman(bet));
+            if (_settings.initialBet > 0)
+                input.SetTextWithoutNotify(FormatCurrentBetGerman(_settings.initialBet));
+            else
+                input.SetTextWithoutNotify("0");
             _suppressCurrentBetInputCallbacks = false;
         }
 
@@ -1450,6 +1452,18 @@ namespace Blackjack
         {
             get => _settings.initialBet;
             set => _settings.initialBet = ClampCurrentBet(value);
+        }
+
+        /// <summary>Clears the persisted Current Bet to 0 (chip-tray reset).</summary>
+        public void ClearSavedInitialBet()
+        {
+            if (_settings == null) return;
+
+            _settings.initialBet = 0;
+            _settingsDirty = true;
+
+            if (_menuVisible)
+                RefreshCurrentBetInputDisplay();
         }
 
         /// <summary>
